@@ -3,6 +3,7 @@ import UIKit
 
 struct ContentView: View {
     @EnvironmentObject private var patchDraftCoordinator: PatchDraftCoordinator
+    @EnvironmentObject private var remoteContentStore: RemoteContentStore
     @State private var tabNavigation = AppTabNavigationState()
     let onSignOut: () -> Void
 
@@ -27,6 +28,12 @@ struct ContentView: View {
             GreegSocialView()
                 .tabItem { CompactTabLabel(title: "Redes", systemImage: "link.circle.fill") }
                 .tag(AppSection.redes.rawValue)
+
+            ForEach(Array(remoteContentStore.appContent.categories.filter { $0.parentID == nil }.sorted { $0.sortOrder < $1.sortOrder }.enumerated()), id: \.element.id) { offset, category in
+                NexusCategoryTabView(category: category)
+                    .tabItem { CompactTabLabel(title: category.title, systemImage: category.icon) }
+                    .tag(AppSection.redes.rawValue + offset + 1)
+            }
         }
         .tint(AppTheme.accent)
         .imageScale(.small)
@@ -43,6 +50,68 @@ struct ContentView: View {
             get: { tabNavigation.selectedTab },
             set: { tabNavigation.select($0) }
         )
+    }
+}
+
+private struct NexusCategoryTabView: View {
+    @EnvironmentObject private var remoteContentStore: RemoteContentStore
+    let category: NexusAppCategory
+
+    private var files: [RemoteContentFile] {
+        remoteContentStore.installedFiles.filter {
+            $0.category.caseInsensitiveCompare(category.id) == .orderedSame
+                || $0.category.caseInsensitiveCompare(category.title) == .orderedSame
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    GreegPanel {
+                        HStack(spacing: 12) {
+                            AppRowIcon(systemName: category.icon, tint: AppTheme.accent, symbolSize: 20, frameSize: 48)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(category.title).font(.title3.weight(.black))
+                                Text(category.subtitle.isEmpty ? "Contenido remoto de NEXUS HACK" : category.subtitle)
+                                    .font(.subheadline).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+                    }
+
+                    if files.isEmpty {
+                        GreegPanel {
+                            VStack(spacing: 10) {
+                                Image(systemName: category.icon)
+                                    .font(.system(size: 30, weight: .semibold))
+                                    .foregroundStyle(AppTheme.accent)
+                                Text("Sin contenido todavía")
+                                    .font(.headline.weight(.bold))
+                                Text("Publica archivos en esta categoría y pulsa Sincronizar.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                        }
+                    } else {
+                        ForEach(files) { file in
+                            GreegPanel {
+                                RemoteFileMiniRow(file: file, tint: AppTheme.accent)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .padding(.bottom, 36)
+            }
+            .background(AppTheme.pageBackground.ignoresSafeArea())
+            .navigationTitle(category.title)
+            .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
 
