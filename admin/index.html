@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f7f9" />
+    <title>NEXUS HACK | Panel</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="loginView" class="login-shell">
+      <section class="login-brand">
+        <img src="../NexusCommunity/Assets.xcassets/NexusWolf.imageset/nexus-wolf.png" alt="NEXUS HACK" />
+        <p class="eyebrow">PANEL DE COMUNIDAD</p>
+        <h1>NEXUS HACK</h1>
+        <p class="muted">Publicaciones, categorías y enlaces oficiales.</p>
+      </section>
+      <form id="loginForm" class="login-form">
+        <h2>Iniciar sesión</h2>
+        <label>Correo<input id="email" type="email" autocomplete="username" required /></label>
+        <label>Contraseña<input id="password" type="password" autocomplete="current-password" required /></label>
+        <button class="button primary" type="submit">Entrar al panel</button>
+        <p id="loginError" class="error" role="status"></p>
+      </form>
+    </main>
+
+    <div id="adminView" class="app-shell hidden">
+      <aside class="sidebar">
+        <div class="brand-mini">
+          <img src="../NexusCommunity/Assets.xcassets/NexusWolf.imageset/nexus-wolf.png" alt="" />
+          <div><strong>NEXUS HACK</strong><span>Comunidad</span></div>
+        </div>
+        <nav class="side-nav" aria-label="Panel">
+          <button class="nav-item active" data-view="posts"><span>▤</span> Publicaciones</button>
+          <button class="nav-item" data-view="categories"><span>▦</span> Categorías</button>
+          <button class="nav-item" data-view="settings"><span>⚙</span> Identidad y redes</button>
+        </nav>
+        <div class="sidebar-footer"><span class="online-dot"></span><span id="sessionEmail">Sesión activa</span></div>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <div><p class="eyebrow">NEXUS HACK</p><h1 id="pageTitle">Publicaciones</h1></div>
+          <div class="top-actions"><span id="saveStatus" class="muted"></span><button id="signOut" class="button secondary" type="button">Salir</button></div>
+        </header>
+        <div id="notice" class="notice hidden" role="status"></div>
+
+        <section id="postsView" class="view-grid">
+          <form id="postForm" class="panel form-panel">
+            <div class="panel-heading"><div><p class="eyebrow">EDITOR</p><h2 id="postFormTitle">Nueva publicación</h2></div><button id="newPost" class="icon-button" type="button" title="Limpiar formulario">＋</button></div>
+            <input id="postId" type="hidden" />
+            <label>Tipo<select id="postKind"><option value="announcement">Anuncio</option><option value="tutorial">Tutorial</option><option value="gallery">Galería de imágenes</option></select></label>
+            <label>Categoría<select id="postCategory"></select></label>
+            <label>Título<input id="postTitle" type="text" maxlength="120" required placeholder="Título de la publicación" /></label>
+            <label>Texto<textarea id="postBody" rows="5" maxlength="1800" placeholder="Escribe una descripción o guía breve"></textarea></label>
+            <label>Imagen de portada<input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp" /><span class="hint">PNG, JPG o WebP. Máximo 4 MB.</span></label>
+            <div id="imagePreview" class="image-preview hidden"><img id="previewImage" alt="Vista previa" /><button id="removeImage" class="remove-image" type="button" aria-label="Quitar imagen">×</button></div>
+            <label>URL de imagen<input id="imageURL" type="url" placeholder="Se completa al subir una imagen" /></label>
+            <label class="switch-row"><input id="published" type="checkbox" /><span>Publicar en la app</span></label>
+            <button class="button primary" type="submit">Guardar publicación</button>
+          </form>
+
+          <section class="panel list-panel">
+            <div class="panel-heading"><div><p class="eyebrow">CONTENIDO</p><h2>Publicaciones</h2></div><button id="refreshPosts" class="button secondary" type="button">Actualizar</button></div>
+            <div class="toolbar"><input id="searchPosts" type="search" placeholder="Buscar por título o texto" /><span id="postCount" class="muted"></span></div>
+            <div id="postsList" class="post-list"></div>
+          </section>
+        </section>
+
+        <section id="categoriesView" class="view-grid hidden">
+          <form id="categoryForm" class="panel form-panel">
+            <div class="panel-heading"><div><p class="eyebrow">ORGANIZACIÓN</p><h2 id="categoryFormTitle">Nueva categoría</h2></div><button id="newCategory" class="icon-button" type="button" title="Limpiar formulario">＋</button></div>
+            <input id="categoryId" type="hidden" />
+            <label>Nombre<input id="categoryName" type="text" maxlength="48" required placeholder="Ej. Carros" /></label>
+            <label>Icono<select id="categoryIcon">
+              <option value="square.grid.2x2">Cuadrícula</option><option value="megaphone.fill">Anuncios</option><option value="book.closed.fill">Tutoriales</option><option value="photo">Galería</option><option value="car.side.fill">Carros</option><option value="shield.lefthalf.filled">Seguridad</option><option value="sparkles">Novedades</option><option value="person.2.fill">Comunidad</option><option value="gamecontroller.fill">Gaming</option><option value="link">Enlaces</option>
+            </select></label>
+            <label>Dentro de<select id="categoryParent"></select><span class="hint">Déjalo en “Principal” para crear una categoría raíz.</span></label>
+            <label>Posición<input id="categoryOrder" type="number" min="0" max="999" value="0" /></label>
+            <label class="switch-row"><input id="categoryActive" type="checkbox" checked /><span>Visible en la app</span></label>
+            <button class="button primary" type="submit">Guardar categoría</button>
+          </form>
+          <section class="panel list-panel">
+            <div class="panel-heading"><div><p class="eyebrow">ESTRUCTURA</p><h2>Categorías</h2></div><button id="refreshCategories" class="button secondary" type="button">Actualizar</button></div>
+            <div id="categoriesList" class="category-list"></div>
+          </section>
+        </section>
+
+        <section id="settingsView" class="panel settings-panel hidden">
+          <div class="panel-heading"><div><p class="eyebrow">MARCA</p><h2>Identidad y redes</h2></div></div>
+          <form id="settingsForm" class="settings-form">
+            <label>Nombre de la app<input id="brandName" type="text" maxlength="48" required /></label>
+            <label>Frase principal<input id="tagline" type="text" maxlength="100" /></label>
+            <label>Enlace de Discord<input id="discordURL" type="url" placeholder="https://discord.gg/..." /></label>
+            <label>Enlace de TikTok<input id="tiktokURL" type="url" placeholder="https://www.tiktok.com/@..." /></label>
+            <button class="button primary" type="submit">Guardar identidad</button>
+          </form>
+        </section>
+        <footer class="footer-note">Los cambios se publican al guardar y aparecen al sincronizar la app.</footer>
+      </main>
+    </div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
