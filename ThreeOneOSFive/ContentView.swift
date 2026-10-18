@@ -119,7 +119,7 @@ private struct NexusCategoryTabView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 36)
             }
-            .background(AppTheme.pageBackground.ignoresSafeArea())
+            .background(NexusBackground { Color.clear }.ignoresSafeArea())
             .navigationTitle(category.title)
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -183,7 +183,7 @@ private struct GreegHomeView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 36)
             }
-            .background(AppTheme.pageBackground.ignoresSafeArea())
+            .background(NexusBackground { Color.clear }.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -230,10 +230,12 @@ private struct GreegHomeView: View {
 
                     Spacer(minLength: 8)
 
-                    Label(appState.isSupported ? "Listo" : "Revisar", systemImage: appState.isSupported ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                        .font(.caption.weight(.black))
-                        .foregroundColor(AppTheme.accent)
-                        .labelStyle(.titleAndIcon)
+                    HStack(spacing: 4) {
+                        NexusStatusDot(isActive: appState.isSupported, tint: appState.isSupported ? NexusTheme.success : NexusTheme.danger)
+                        Text(appState.isSupported ? "Listo" : "Revisar")
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(appState.isSupported ? NexusTheme.success : NexusTheme.danger)
+                    }
                 }
 
                 Divider().overlay(Color.white.opacity(0.08))
@@ -1371,20 +1373,9 @@ private struct GreegPanel<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        content()
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    .fill(Color(uiColor: UIColor { traits in
-                        traits.userInterfaceStyle == .dark
-                            ? UIColor(red: 0.075, green: 0.105, blue: 0.15, alpha: 1)
-                            : UIColor.white
-                    }))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 17, style: .continuous)
-                            .stroke(AppTheme.accent.opacity(0.28), lineWidth: 1)
-                    )
-            )
+        NexusCard(style: .solid) {
+            content()
+        }
     }
 }
 
