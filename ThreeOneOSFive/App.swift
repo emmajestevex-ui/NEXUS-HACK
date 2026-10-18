@@ -23,8 +23,24 @@ struct ThreeOneOSFiveApp: App {
     private let licensePoller = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     init() {
+        configureTabBarAppearance()
         setupLogCapture()
         log("app: 3105 launching — iOS \(AppInfo.osVersion) (\(AppInfo.osBuild)) \(AppInfo.machineName)")
+    }
+
+    private func configureTabBarAppearance() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.028, green: 0.037, blue: 0.052, alpha: 0.97)
+                : UIColor(red: 0.97, green: 0.98, blue: 0.995, alpha: 0.97)
+        }
+        appearance.shadowColor = UIColor.separator.withAlphaComponent(0.18)
+        UITabBar.appearance().standardAppearance = appearance
+        if #available(iOS 15.0, *) {
+            UITabBar.appearance().scrollEdgeAppearance = appearance
+        }
     }
 
     private var language: AppLanguage {

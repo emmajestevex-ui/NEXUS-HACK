@@ -17,6 +17,7 @@ struct ContentView: View {
         }
         .tint(AppTheme.accent)
         .imageScale(.small)
+        .animation(.easeInOut(duration: 0.22), value: tabNavigation.selectedTab)
         .onChange(of: patchDraftCoordinator.request?.id) { requestID in
             if requestID != nil, let index = visibleTabs.firstIndex(where: { $0.kind == "files" }) { tabNavigation.select(index) }
         }
@@ -86,6 +87,7 @@ private struct NexusCategoryTabView: View {
                             Spacer()
                         }
                     }
+                    .nexusEntrance(index: 0)
 
                     if files.isEmpty {
                         GreegPanel {
@@ -103,11 +105,13 @@ private struct NexusCategoryTabView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 18)
                         }
+                        .nexusEntrance(index: 1)
                     } else {
-                        ForEach(files) { file in
+                        ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
                             GreegPanel {
                                 RemoteFileMiniRow(file: file, tint: AppTheme.accent)
                             }
+                            .nexusEntrance(index: index + 1)
                         }
                     }
                 }
@@ -156,22 +160,24 @@ private struct GreegHomeView: View {
     @EnvironmentObject private var store: PatchProjectStore
     let onSignOut: () -> Void
     let onOpenFiles: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var logoIsBreathing = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    heroCard
+                    heroCard.nexusEntrance(index: 0)
                     if let announcement = remoteContentStore.appContent.announcement {
-                        announcementCard(announcement)
+                        announcementCard(announcement).nexusEntrance(index: 1)
                     }
-                    remoteCategoriesCard
-                    sectionTitle("ARCHIVOS PRINCIPALES")
-                    mainFilesCard
-                    sectionTitle("REDES")
-                    compactSocialCard
-                    sectionTitle("ACTUALIZACIONES")
-                    updatesCard
+                    remoteCategoriesCard.nexusEntrance(index: 2)
+                    sectionTitle("ARCHIVOS PRINCIPALES").nexusEntrance(index: 3)
+                    mainFilesCard.nexusEntrance(index: 4)
+                    sectionTitle("REDES").nexusEntrance(index: 5)
+                    compactSocialCard.nexusEntrance(index: 6)
+                    sectionTitle("ACTUALIZACIONES").nexusEntrance(index: 7)
+                    updatesCard.nexusEntrance(index: 8)
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 10)
@@ -193,6 +199,10 @@ private struct GreegHomeView: View {
             .onAppear {
                 remoteContentStore.loadLocalState()
                 store.reload()
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                    logoIsBreathing = true
+                }
             }
             .onChange(of: remoteContentStore.remoteVersion) { _ in
                 store.reload()
@@ -205,6 +215,7 @@ private struct GreegHomeView: View {
             VStack(alignment: .leading, spacing: 11) {
                 HStack(spacing: 12) {
                     AppLogo(size: 48)
+                        .scaleEffect(logoIsBreathing ? 1.035 : 1)
                         .shadow(color: AppTheme.accent.opacity(0.28), radius: 10)
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -250,6 +261,7 @@ private struct GreegHomeView: View {
                     .foregroundStyle(AppTheme.accent)
                 }
                 .buttonStyle(.plain)
+                .buttonStyle(NexusPressStyle())
 
                 Divider().overlay(Color.white.opacity(0.08))
 

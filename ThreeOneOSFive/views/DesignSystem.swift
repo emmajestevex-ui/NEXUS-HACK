@@ -1,5 +1,48 @@
 import SwiftUI
 
+enum NexusMotion {
+    static let entrance = Animation.spring(response: 0.52, dampingFraction: 0.86)
+    static let interaction = Animation.easeOut(duration: 0.18)
+}
+
+struct NexusEntranceModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let index: Int
+    @State private var isVisible = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(reduceMotion || isVisible ? 1 : 0)
+            .offset(y: reduceMotion || isVisible ? 0 : 14)
+            .scaleEffect(reduceMotion || isVisible ? 1 : 0.98)
+            .onAppear {
+                guard !reduceMotion else {
+                    isVisible = true
+                    return
+                }
+                let delay = min(Double(index) * 0.045, 0.28)
+                withAnimation(NexusMotion.entrance.delay(delay)) {
+                    isVisible = true
+                }
+            }
+    }
+}
+
+struct NexusPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.975 : 1)
+            .opacity(configuration.isPressed ? 0.84 : 1)
+            .animation(NexusMotion.interaction, value: configuration.isPressed)
+    }
+}
+
+extension View {
+    func nexusEntrance(index: Int = 0) -> some View {
+        modifier(NexusEntranceModifier(index: index))
+    }
+}
+
 enum AppTheme {
     static let accent = Color(
         uiColor: UIColor { traits in
