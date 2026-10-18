@@ -143,6 +143,7 @@ window.__GREEG_ADMIN_READY = SCRIPT_VERSION;
 const state = {
   files: [],
   licenses: [],
+  appContent: null,
   session: null,
   busy: false,
 };
@@ -208,6 +209,18 @@ const els = {
   saveSettingsButton: $("#saveSettingsButton"),
   settingsInput: $("#settingsInput"),
   settingsStatusText: $("#settingsStatusText"),
+  newCategoryButton: $("#newCategoryButton"),
+  cancelCategoryButton: $("#cancelCategoryButton"),
+  categoryForm: $("#categoryForm"),
+  editingCategoryId: $("#editingCategoryId"),
+  categoryNameInput: $("#categoryNameInput"),
+  categorySubtitleInput: $("#categorySubtitleInput"),
+  categoryIconInput: $("#categoryIconInput"),
+  categoryIconFileInput: $("#categoryIconFileInput"),
+  categoryColorInput: $("#categoryColorInput"),
+  categoryParentInput: $("#categoryParentInput"),
+  categoryOrderInput: $("#categoryOrderInput"),
+  categoryList: $("#categoryList"),
 };
 
 init();
@@ -254,6 +267,9 @@ function bindEvents() {
   els.copyGeneratedKeysButton.addEventListener("click", copyGeneratedKeys);
   els.loadSettingsButton.addEventListener("click", loadSettings);
   els.saveSettingsButton.addEventListener("click", saveSettings);
+  els.newCategoryButton.addEventListener("click", () => openCategoryEditor());
+  els.cancelCategoryButton.addEventListener("click", closeCategoryEditor);
+  els.categoryForm.addEventListener("submit", saveCategoryFromForm);
   els.keyDurationUnitInput.addEventListener("change", syncDurationInput);
   els.customKeyInput.addEventListener("input", syncCustomKeyQuantity);
   els.nameInput.addEventListener("input", () => {
@@ -479,7 +495,85 @@ async function loadSettings() {
     return;
   }
   els.settingsInput.value = JSON.stringify(data || DEFAULT_APP_CONTENT, null, 2);
+  state.appContent = data || DEFAULT_APP_CONTENT;
+  renderCategoryEditor();
   els.settingsStatusText.textContent = "Diseno cargado. Puedes editar categorias, subcategorias, anuncios y redes.";
+}
+
+function renderCategoryEditor() {
+  const content = state.appContent || DEFAULT_APP_CONTENT;
+  const categories = Array.isArray(content.categories) ? content.categories : [];
+  els.categoryParentInput.innerHTML = '<option value="">Sin padre</option>' + categories
+    .filter((category) => category.id !== els.editingCategoryId.value)
+    .map((category) => `<option value="${escapeHtml(category.id)}">${escapeHtml(category.title || category.id)}</option>`)
+    .join("");
+  els.categoryList.innerHTML = categories.length ? categories.map((category) => `
+    <article class="categoryEditorCard">
+      <div class="categoryEditorIcon"><span class="sfIcon">${escapeHtml(category.icon || "square.grid.2x2.fill")}</span></div>
+      <div class="categoryEditorMain"><strong>${escapeHtml(category.title || category.id)}</strong><span>${escapeHtml(category.subtitle || "Sin descripción")}</span><small>${escapeHtml(category.color || "blue")} · orden ${Number(category.sort_order || 0)}</small></div>
+      <div class="categoryEditorActions"><button class="ghost categoryEditButton" data-category-id="${escapeHtml(category.id)}" type="button">Editar</button><button class="ghost categoryDeleteButton" data-category-id="${escapeHtml(category.id)}" type="button">Eliminar</button></div>
+    </article>`).join("") : '<p class="muted">Todavía no hay categorías. Pulsa Nueva categoría.</p>';
+  els.categoryList.querySelectorAll(".categoryEditButton").forEach((button) => button.addEventListener("click", () => openCategoryEditor(button.dataset.categoryId)));
+  els.categoryList.querySelectorAll(".categoryDeleteButton").forEach((button) => button.addEventListener("click", () => deleteCategory(button.dataset.categoryId)));
+}
+
+function openCategoryEditor(id = "") {
+  const category = (state.appContent?.categories || []).find((item) => item.id === id);
+  els.categoryForm.classList.remove("hidden");
+  els.editingCategoryId.value = category?.id || "";
+  els.categoryNameInput.value = category?.title || "";
+  els.categorySubtitleInput.value = category?.subtitle || "";
+  els.categoryIconInput.value = category?.icon || "square.grid.2x2.fill";
+  els.categoryColorInput.value = category?.color || "blue";
+  els.categoryOrderInput.value = String(category?.sort_order ?? ((state.appContent?.categories || []).length * 10));
+  renderCategoryEditor();
+  els.categoryParentInput.value = category?.parent_id || "";
+  els.categoryNameInput.focus();
+}
+
+function closeCategoryEditor() {
+  els.categoryForm.classList.add("hidden");
+  els.editingCategoryId.value = "";
+  renderCategoryEditor();
+}
+
+async function saveCategoryFromForm(event) {
+  event.preventDefault();
+  const content = state.appContent || structuredClone(DEFAULT_APP_CONTENT);
+  content.categories = Array.isArray(content.categories) ? [...content.categories] : [];
+  const id = els.editingCategoryId.value || safeSlug(els.categoryNameInput.value);
+  if (!id) return;
+  let iconURL = content.categories.find((category) => category.id === els.editingCategoryId.value)?.icon_url || null;
+  const iconFile = els.categoryIconFileInput.files?.[0];
+  if (iconFile) {
+    const iconPath = `content/ui-icons/${crypto.randomUUID()}.${safeStorageFileName(iconFile.name).split(".").pop() || "png"}`;
+    const { error } = await supabaseClient.storage.from(BUCKET).upload(iconPath, iconFile, { cacheControl: "31536000", contentType: iconFile.type || "image/png", upsert: true });
+    if (error) { els.settingsStatusText.textContent = adminErrorMessage(error); return; }
+    iconURL = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${iconPath}`;
+  }
+  const item = { id, title: els.categoryNameInput.value.trim(), subtitle: els.categorySubtitleInput.value.trim(), icon: els.categoryIconInput.value.trim() || "square.grid.2x2.fill", icon_url: iconURL, color: els.categoryColorInput.value, parent_id: els.categoryParentInput.value || null, sort_order: Number(els.categoryOrderInput.value || 0) };
+  const index = content.categories.findIndex((category) => category.id === els.editingCategoryId.value);
+  if (index >= 0) content.categories[index] = item;
+  else content.categories.push(item);
+  state.appContent = content;
+  els.settingsInput.value = JSON.stringify(content, null, 2);
+  renderCategoryEditor();
+  closeCategoryEditor();
+  await saveSettings();
+}
+
+async function deleteCategory(id) {
+  if (!confirm("¿Eliminar esta categoría? Los archivos no se borrarán, solo dejará de aparecer la pestaña.")) return;
+  const content = state.appContent || structuredClone(DEFAULT_APP_CONTENT);
+  content.categories = (content.categories || []).filter((category) => category.id !== id).map((category) => category.parent_id === id ? { ...category, parent_id: null } : category);
+  state.appContent = content;
+  els.settingsInput.value = JSON.stringify(content, null, 2);
+  renderCategoryEditor();
+  await saveSettings();
+}
+
+function escapeHtml(value = "") {
+  return String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[char]));
 }
 
 async function saveSettings() {
@@ -495,6 +589,8 @@ async function saveSettings() {
     els.settingsStatusText.textContent = "Incluye categories y socials como listas JSON.";
     return;
   }
+  state.appContent = content;
+  renderCategoryEditor();
   setBusy(true, "Guardando diseno remoto...");
   const { error } = await supabaseClient.rpc("admin_update_app_settings", { p_content: content });
   setBusy(false);

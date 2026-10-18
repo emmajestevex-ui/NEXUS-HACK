@@ -179,6 +179,7 @@ struct NexusAppAnnouncement: Codable, Equatable {
     let title: String
     let body: String
     let icon: String
+    let iconURL: String?
     let color: String
 }
 
@@ -195,6 +196,7 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
         case id, title, subtitle, icon, color
         case parentID = "parent_id"
         case sortOrder = "sort_order"
+        case iconURL = "icon_url"
     }
 
     init(from decoder: Decoder) throws {
@@ -203,6 +205,7 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
         title = (try? c.decode(String.self, forKey: .title)) ?? "Categoria"
         subtitle = (try? c.decode(String.self, forKey: .subtitle)) ?? ""
         icon = (try? c.decode(String.self, forKey: .icon)) ?? "square.grid.2x2.fill"
+        iconURL = try? c.decodeIfPresent(String.self, forKey: .iconURL)
         color = (try? c.decode(String.self, forKey: .color)) ?? "blue"
         parentID = try? c.decodeIfPresent(String.self, forKey: .parentID)
         sortOrder = (try? c.decode(Int.self, forKey: .sortOrder)) ?? 0

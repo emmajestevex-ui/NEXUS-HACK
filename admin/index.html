@@ -171,6 +171,27 @@
             </div>
           </div>
           <p id="settingsStatusText" class="notice">Usa el JSON de ejemplo para agregar categorias y redes. Despues pulsa Publicar cambios.</p>
+          <div class="visualEditor">
+            <div class="visualEditorHeader">
+              <div>
+                <h3>Categorías visuales</h3>
+                <p class="muted">Crea las pestañas inferiores sin escribir JSON.</p>
+              </div>
+              <button id="newCategoryButton" class="ghost" type="button">Nueva categoría</button>
+            </div>
+            <form id="categoryForm" class="categoryForm hidden">
+              <input id="editingCategoryId" type="hidden" />
+              <label>Nombre<input id="categoryNameInput" type="text" maxlength="40" placeholder="Tutoriales" required /></label>
+              <label>Descripción<input id="categorySubtitleInput" type="text" maxlength="100" placeholder="Guías y ayuda" /></label>
+              <label>Icono SF Symbol<input id="categoryIconInput" type="text" maxlength="60" value="book.fill" placeholder="book.fill" /><span class="fieldHint">Ejemplo: book.fill, star.fill o bolt.fill.</span></label>
+              <label>O subir imagen<input id="categoryIconFileInput" type="file" accept="image/png,image/jpeg,image/webp" /><span class="fieldHint">La imagen reemplaza el icono inferior después de publicar.</span></label>
+              <label>Color<select id="categoryColorInput"><option value="blue">Azul</option><option value="gray">Gris</option><option value="black">Negro</option></select></label>
+              <label>Categoría padre<select id="categoryParentInput"><option value="">Sin padre</option></select></label>
+              <label>Orden<input id="categoryOrderInput" type="number" min="0" value="0" /></label>
+              <div class="categoryFormActions"><button id="cancelCategoryButton" class="ghost" type="button">Cancelar</button><button class="primary" type="submit">Guardar categoría</button></div>
+            </form>
+            <div id="categoryList" class="categoryList"></div>
+          </div>
           <textarea id="settingsInput" class="settingsEditor" rows="18" spellcheck="false"></textarea>
         </section>
 

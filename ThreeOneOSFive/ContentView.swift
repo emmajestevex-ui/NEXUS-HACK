@@ -31,7 +31,7 @@ struct ContentView: View {
 
             ForEach(Array(remoteContentStore.appContent.categories.filter { $0.parentID == nil }.sorted { $0.sortOrder < $1.sortOrder }.enumerated()), id: \.element.id) { offset, category in
                 NexusCategoryTabView(category: category)
-                    .tabItem { CompactTabLabel(title: category.title, systemImage: category.icon) }
+                    .tabItem { CompactTabLabel(title: category.title, systemImage: category.icon, iconURL: category.iconURL) }
                     .tag(AppSection.redes.rawValue + offset + 1)
             }
         }
@@ -118,10 +118,19 @@ private struct NexusCategoryTabView: View {
 private struct CompactTabLabel: View {
     let title: String
     let systemImage: String
+    var iconURL: String? = nil
 
     @ViewBuilder
     var body: some View {
-        if let image = UIImage(
+        if let iconURL, let url = URL(string: iconURL) {
+            AsyncImage(url: url) { phase in
+                if let image = phase.image {
+                    image.resizable().scaledToFit()
+                } else {
+                    Image(systemName: systemImage)
+                }
+            }
+        } else if let image = UIImage(
             systemName: systemImage,
             withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
         )?.withRenderingMode(.alwaysTemplate) {

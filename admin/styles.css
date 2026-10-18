@@ -162,6 +162,88 @@ h3 {
   font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+.visualEditor {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0;
+  padding: 16px;
+  background: #0b1726;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.visualEditorHeader,
+.categoryEditorCard,
+.categoryFormActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.categoryForm {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  background: var(--panel-strong);
+  border-radius: 8px;
+}
+
+.categoryFormActions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.categoryList {
+  display: grid;
+  gap: 8px;
+}
+
+.categoryEditorCard {
+  padding: 11px 12px;
+  background: #101f31;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.categoryEditorIcon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  color: var(--accent-strong);
+  background: rgba(47, 143, 255, 0.14);
+  border-radius: 9px;
+}
+
+.sfIcon {
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.categoryEditorMain {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.categoryEditorMain span,
+.categoryEditorMain small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.categoryEditorActions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .quickPanel {
   display: grid;
   gap: 10px;
@@ -546,6 +628,19 @@ textarea:focus {
 }
 
 @media (max-width: 820px) {
+  .categoryForm {
+    grid-template-columns: 1fr;
+  }
+
+  .categoryFormActions {
+    grid-column: auto;
+  }
+
+  .categoryEditorCard {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
   h1 {
     font-size: 34px;
   }
