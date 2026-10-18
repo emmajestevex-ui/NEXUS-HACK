@@ -179,7 +179,6 @@ struct NexusAppAnnouncement: Codable, Equatable {
     let title: String
     let body: String
     let icon: String
-    let iconURL: String?
     let color: String
 }
 
@@ -188,6 +187,7 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
     let title: String
     let subtitle: String
     let icon: String
+    let iconURL: String?
     let color: String
     let parentID: String?
     let sortOrder: Int

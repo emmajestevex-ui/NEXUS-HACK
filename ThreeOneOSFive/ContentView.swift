@@ -29,7 +29,7 @@ struct ContentView: View {
                 .tabItem { CompactTabLabel(title: "Redes", systemImage: "link.circle.fill") }
                 .tag(AppSection.redes.rawValue)
 
-            ForEach(Array(remoteContentStore.appContent.categories.filter { $0.parentID == nil }.sorted { $0.sortOrder < $1.sortOrder }.enumerated()), id: \.element.id) { offset, category in
+            ForEach(Array(bottomCategories.enumerated()), id: \.element.id) { offset, category in
                 NexusCategoryTabView(category: category)
                     .tabItem { CompactTabLabel(title: category.title, systemImage: category.icon, iconURL: category.iconURL) }
                     .tag(AppSection.redes.rawValue + offset + 1)
@@ -50,6 +50,12 @@ struct ContentView: View {
             get: { tabNavigation.selectedTab },
             set: { tabNavigation.select($0) }
         )
+    }
+
+    private var bottomCategories: [NexusAppCategory] {
+        remoteContentStore.appContent.categories
+            .filter { $0.parentID == nil }
+            .sorted { $0.sortOrder < $1.sortOrder }
     }
 }
 
