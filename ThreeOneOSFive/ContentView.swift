@@ -4,6 +4,7 @@ import UIKit
 struct ContentView: View {
     @EnvironmentObject private var patchDraftCoordinator: PatchDraftCoordinator
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
+    @AppStorage("greeg.license.supabaseUnlocked") private var isUnlocked = false
     @State private var tabNavigation = AppTabNavigationState()
     @State private var showingMoreTabs = false
     @Namespace private var dockNamespace
@@ -39,6 +40,14 @@ struct ContentView: View {
         .onChange(of: patchDraftCoordinator.importRequest?.id) { requestID in
             if requestID != nil, let index = visibleTabs.firstIndex(where: { $0.kind == "files" }) { tabNavigation.select(index) }
         }
+        .onChange(of: isUnlocked) { _ in
+            showingMoreTabs = false
+            if let homeIndex = visibleTabs.firstIndex(where: { $0.kind == "home" }) {
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.84)) {
+                    tabNavigation.select(homeIndex)
+                }
+            }
+        }
         .sheet(isPresented: $showingMoreTabs) {
             NexusMoreTabsSheet(tabs: Array(visibleTabs.dropFirst(4)), baseIndex: 4, selection: tabSelection)
         }
@@ -53,22 +62,28 @@ struct ContentView: View {
 
     private var visibleTabs: [NexusAppTab] {
         let configured = remoteContentStore.appContent.tabs
-        if configured.isEmpty { return NexusAppContent.defaultTabs }
+        let sourceTabs = configured.isEmpty ? NexusAppContent.defaultTabs : configured
 
-        let configuredIDs = Set(configured.map(\.id))
+        let configuredIDs = Set(sourceTabs.map(\.id))
         let builtInAdditions = NexusAppContent.defaultTabs.filter {
             ($0.kind == "membership" || $0.kind == "support") && !configuredIDs.contains($0.id)
         }
-        return (configured + builtInAdditions)
+        let allTabs = (sourceTabs + builtInAdditions)
             .filter(\.enabled)
             .sorted { $0.sortOrder < $1.sortOrder }
+
+        guard !isUnlocked else { return allTabs }
+        let publicKinds: Set<String> = ["home", "installation", "socials", "membership", "support"]
+        return allTabs.filter { publicKinds.contains($0.kind) }
     }
 
     @ViewBuilder
     private func tabView(for tab: NexusAppTab) -> some View {
         switch tab.kind {
         case "home":
-            GreegHomeView(onSignOut: onSignOut) {
+            GreegHomeView(onSignOut: onSignOut, onOpenMembership: {
+                if let index = visibleTabs.firstIndex(where: { $0.kind == "membership" }) { tabNavigation.select(index) }
+            }) {
                 if let index = visibleTabs.firstIndex(where: { $0.kind == "files" }) { tabNavigation.select(index) }
             }
         case "files":
@@ -539,10 +554,13 @@ private struct GreegHomeView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
     @EnvironmentObject private var store: PatchProjectStore
+    @AppStorage("greeg.license.supabaseUnlocked") private var isUnlocked = false
     let onSignOut: () -> Void
+    let onOpenMembership: () -> Void
     let onOpenFiles: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var logoIsBreathing = false
+    @State private var heroRingRotation = 0.0
 
     var body: some View {
         NavigationStack {
@@ -584,6 +602,9 @@ private struct GreegHomeView: View {
                 withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
                     logoIsBreathing = true
                 }
+                withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) {
+                    heroRingRotation = 360
+                }
             }
             .onChange(of: remoteContentStore.remoteVersion) { _ in
                 store.reload()
@@ -595,9 +616,21 @@ private struct GreegHomeView: View {
         GreegPanel {
             VStack(alignment: .leading, spacing: 11) {
                 HStack(spacing: 12) {
-                    AppLogo(size: 48)
-                        .scaleEffect(logoIsBreathing ? 1.035 : 1)
-                        .shadow(color: AppTheme.accent.opacity(0.28), radius: 10)
+                    ZStack {
+                        Circle()
+                            .stroke(NexusTheme.blue.opacity(0.16), lineWidth: 1.5)
+                        Circle()
+                            .trim(from: 0.04, to: 0.28)
+                            .stroke(
+                                AngularGradient(colors: [NexusTheme.blue, NexusTheme.blueBright, .white], center: .center),
+                                style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(heroRingRotation))
+                        AppLogo(size: 46)
+                            .scaleEffect(logoIsBreathing ? 1.035 : 1)
+                            .shadow(color: AppTheme.accent.opacity(0.28), radius: 10)
+                    }
+                    .frame(width: 58, height: 58)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("NEXUS HACK")
@@ -611,11 +644,15 @@ private struct GreegHomeView: View {
 
                     Spacer(minLength: 8)
 
-                    HStack(spacing: 4) {
-                        NexusStatusDot(isActive: appState.isSupported, tint: appState.isSupported ? NexusTheme.success : NexusTheme.danger)
-                        Text(appState.isSupported ? "Listo" : "Revisar")
-                            .font(.caption.weight(.black))
-                            .foregroundStyle(appState.isSupported ? NexusTheme.success : NexusTheme.danger)
+                    VStack(alignment: .trailing, spacing: 7) {
+                        let ready = isUnlocked && appState.isSupported
+                        HStack(spacing: 4) {
+                            NexusStatusDot(isActive: ready, tint: isUnlocked ? (appState.isSupported ? NexusTheme.success : NexusTheme.danger) : NexusTheme.blueBright)
+                            Text(!isUnlocked ? "Vista previa" : (appState.isSupported ? "Listo" : "Revisar"))
+                                .font(.caption.weight(.black))
+                                .foregroundStyle(!isUnlocked ? NexusTheme.blueBright : (appState.isSupported ? NexusTheme.success : NexusTheme.danger))
+                        }
+                        NexusBadge(title: isUnlocked ? "PRO" : "PREVIEW", tint: isUnlocked ? NexusTheme.success : NexusTheme.blueBright)
                     }
                 }
 
@@ -648,7 +685,9 @@ private struct GreegHomeView: View {
 
                 Divider().overlay(Color.white.opacity(0.08))
 
-                if homePreviewProjects.isEmpty {
+                if !isUnlocked {
+                    NexusProtectedPreview(onOpenMembership: onOpenMembership)
+                } else if homePreviewProjects.isEmpty {
                     HomePatchRow(icon: "shippingbox.fill", title: "Sin archivos", subtitle: "Sincroniza para cargar", tint: AppTheme.accent)
                 } else {
                     ForEach(homePreviewProjects.prefix(3), id: \.id) { project in
@@ -690,34 +729,43 @@ private struct GreegHomeView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(remoteContentStore.installedFiles.isEmpty ? "Sincronizar" : "Actualizado")
                             .font(.headline.weight(.black))
-                        Text(remoteContentStore.detailText)
+                        Text(isUnlocked ? remoteContentStore.detailText : "Activa tu key desde Membresía para sincronizar contenido privado.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("v\(remoteContentStore.remoteVersion)")
+                        Text(isUnlocked ? "v\(remoteContentStore.remoteVersion)" : "LOCK")
                             .font(.headline.weight(.black))
                             .foregroundColor(AppTheme.accent)
-                        Text("\(remoteContentStore.installedFiles.count) files")
+                        Text("\(isUnlocked ? remoteContentStore.installedFiles.count : 0) files")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
                 }
 
                 Button {
-                    BundledPatchSeeder.seedIfNeeded()
-                    remoteContentStore.syncIfPossible(force: true)
+                    if isUnlocked {
+                        BundledPatchSeeder.seedIfNeeded()
+                        remoteContentStore.syncIfPossible(force: true)
+                    } else {
+                        onOpenMembership()
+                    }
                 } label: {
-                    Label(remoteContentStore.isBusy ? "Sincronizando" : "Sincronizar", systemImage: "arrow.clockwise.circle.fill")
+                    Label(
+                        isUnlocked
+                            ? (remoteContentStore.isBusy ? "Sincronizando" : "Sincronizar")
+                            : "Activar membresía",
+                        systemImage: isUnlocked ? "arrow.clockwise.circle.fill" : "key.fill"
+                    )
                         .font(.headline.weight(.black))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.roundedRectangle(radius: 14))
-                .disabled(remoteContentStore.isBusy)
+                .disabled(isUnlocked && remoteContentStore.isBusy)
 
                 if let progress = remoteContentStore.progress, remoteContentStore.isBusy {
                     ProgressView(value: progress)
@@ -766,7 +814,22 @@ private struct GreegHomeView: View {
     private var remoteCategoriesCard: some View {
         let categories = remoteContentStore.appContent.categories.sorted { $0.sortOrder < $1.sortOrder }
         return Group {
-            if !categories.isEmpty {
+            if !isUnlocked {
+                NexusCard(style: .elevated) {
+                    HStack(spacing: 12) {
+                        NexusIconTile(systemName: "lock.shield.fill", tint: NexusTheme.blueBright, size: 42)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Contenido protegido")
+                                .font(.headline.weight(.black))
+                            Text("Activa tu membresía para ver archivos, categorías y actualizaciones.")
+                                .font(.subheadline)
+                                .foregroundStyle(NexusTheme.secondaryText)
+                                .lineLimit(2)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            } else if !categories.isEmpty {
                 VStack(alignment: .leading, spacing: 9) {
                     sectionTitle("CATEGORÍAS")
                     ForEach(categories) { category in
@@ -815,6 +878,33 @@ private struct GreegHomeView: View {
             .foregroundStyle(.secondary)
             .tracking(1.2)
             .padding(.leading, 4)
+    }
+}
+
+private struct NexusProtectedPreview: View {
+    let onOpenMembership: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            NexusIconTile(systemName: "lock.fill", tint: NexusTheme.blueBright, size: 38)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Archivos privados")
+                    .font(.headline.weight(.black))
+                Text("Activa tu key para cargar y sincronizar tus archivos.")
+                    .font(.caption)
+                    .foregroundStyle(NexusTheme.secondaryText)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            Button("Activar") {
+                onOpenMembership()
+            }
+            .font(.caption.weight(.black))
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .tint(NexusTheme.blue)
+        }
+        .padding(.vertical, 2)
     }
 }
 

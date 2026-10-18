@@ -368,14 +368,14 @@ private struct NexusLaunchExperience: View {
             }
 
             guard !reduceMotion else {
-                finish(after: 0.45)
+                finish(after: 0.6)
                 return
             }
 
-            withAnimation(.linear(duration: 1.9).repeatForever(autoreverses: false)) {
+            withAnimation(.linear(duration: 2.1).repeatForever(autoreverses: false)) {
                 ringRotation = 360
             }
-            finish(after: 1.65)
+            finish(after: 2.15)
         }
     }
 
