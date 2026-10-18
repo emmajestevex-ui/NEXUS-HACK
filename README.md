@@ -1,26 +1,56 @@
-# NEXUS HACK
+# greeg app
 
-Community app and publishing panel for announcements, tutorials, image galleries, official links, and editable categories/subcategories. The app displays community content only; it does not install files, modify games, or provide gameplay cheats.
+Private client build with Supabase key activation and automatic bundled patches.
 
-## Supabase setup
+## What this build does
 
-1. Open the Supabase project SQL Editor and run `supabase/schema.sql`.
-2. In Supabase Authentication, create the admin user with an email and password.
-3. In the SQL Editor, replace `YOUR_ADMIN_EMAIL` in the commented admin insert at the end of the schema with that email, uncomment those three lines, and run them. Do not expose a service-role key in the app or website.
-4. In Authentication URL settings, add the published GitHub Pages URL to the allowed redirect URLs if email login requires it.
+- Shows the app as `greeg app`.
+- Requires a Supabase license key before opening the app.
+- Consumes each key one time on the server and binds it to one iOS device ID.
+- Re-checks the license on launch, foreground, and every 10 seconds while active.
+- Syncs published remote files from Supabase Storage into GREEG APP's own app storage, using a versioned `target_path` so replacing the same route downloads only the changed file.
+- Downloads only changed files, verifies SHA-256, and rolls back local content if an update fails.
+- Adds a PC admin panel in `admin/` for uploading, replacing, disabling, deleting, and publishing content changes.
+- Creates the internal `Asset Indexer`, `Shaders`, and `144 fps` patches automatically after activation.
+- Shows the extra `TIO GREEG` patch only for the special key `TIO-GREEG927394HD`.
+- Lets the client use `Apply`, `Original`, and name editing only.
+- Hides Files, Cleaner, Wallpapers, patch creation, import, export, and editing.
 
-The publishable key in the iOS app and admin panel is intended for clients; Row Level Security policies protect writes. Never put a Supabase secret/service-role key in client code.
+## Included private payloads
 
-## Admin panel
+The bundled payload files live in:
 
-The panel lives in `admin/` and can be published from GitHub Actions using GitHub Pages. In the repository settings, enable Pages with **GitHub Actions** as its source. The workflow publishes the panel whenever `main` changes. Log in with the Supabase Auth admin created above. Categories support one nested level; categories are editable by name, SF Symbols icon, order, visibility, and parent. Posts can contain text and a PNG/JPG/WebP image up to 4 MB. Every Actions run also creates a GitHub Release containing a standalone admin ZIP and this SQL file.
+```text
+ThreeOneOSFive/BundledPatchPayloads/
+```
 
-## iOS app
+Included names:
 
-Open `NexusCommunity.xcodeproj` in Xcode on macOS. GitHub Actions builds a device-targeted **unsigned IPA** and attaches it to a public GitHub Release for direct download. Import it into ESign and sign it with your own compatible `.p12` certificate and `.mobileprovision` profile. Until signed, the IPA is not installable. A signed app can only be produced using the app owner's certificate/profile.
+```text
+assetindexer.H5ak1JM1Eck~2FxRcJrEp~2FMzeuqmY~3D
+shaders.HPt9DZviTSXL9hpGW9QNOMigNLA~3D
+com.dts.freefireth.plist
+assetindexer.tio-greeg927394hd
+```
 
-The release also contains `nexus-community-admin.zip` (self-contained panel files) and `schema.sql`. The Supabase publishable key is in the client configuration; there is no embedded admin password or service-role key. Create an admin login in Supabase Auth and grant it access using the SQL instructions.
+Patch targets:
 
-## Configuration
+```text
+Asset Indexer:
+Documents/contentcache/Compulsory/ios/gameassetbundles/avatar/assetindexer.H5ak1JM1Eck~2FxRcJrEp~2FMzeuqmY~3D
 
-Supabase project URL and publishable key are in `NexusCommunity/AppConfig.swift` and `admin/app.js`. The Discord link is initially seeded in the database. Set TikTok from the admin panel when its exact profile URL is available.
+Shaders:
+Documents/contentcache/Optional/ios/gameassetbundles/shaders.HPt9DZviTSXL9hpGW9QNOMigNLA~3D
+
+144 fps:
+Library/Preferences/com.dts.freefireth.plist
+
+TIO GREEG, only for `TIO-GREEG927394HD`:
+Documents/contentcache/Compulsory/ios/gameassetbundles/avatar/assetindexer.H5ak1JM1Eck~2FxRcJrEp~2FMzeuqmY~3D
+```
+
+Run `supabase/licenses_setup.sql` before using the app. It disables old numeric keys like `GREEG-1`, adds secure key generation, and creates the admin RPC functions.
+
+Run `supabase/remote_content_setup.sql` to enable remote content releases, `target_path` routing, and the `greeg-content` Storage bucket. The iOS client and the PC panel both use the same Supabase project URL and publishable key; admin writes require Supabase Auth plus a row in `public.license_admins`.
+
+See `GREEG_BUILD_GUIDE.md` for Supabase setup and GitHub Actions build steps.
