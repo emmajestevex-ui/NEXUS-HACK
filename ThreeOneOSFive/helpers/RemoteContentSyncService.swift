@@ -231,6 +231,19 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
         sortOrder = (try? c.decode(Int.self, forKey: .sortOrder)) ?? 0
     }
 
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(subtitle, forKey: .subtitle)
+        try c.encode(icon, forKey: .icon)
+        try c.encodeIfPresent(iconURL, forKey: .iconURL)
+        try c.encode(color, forKey: .color)
+        try c.encode(contentType, forKey: .contentType)
+        try c.encodeIfPresent(parentID, forKey: .parentID)
+        try c.encode(sortOrder, forKey: .sortOrder)
+    }
+
     var isTextCategory: Bool {
         contentType == "text"
     }
