@@ -13,11 +13,13 @@ The publishable key in the iOS app and admin panel is intended for clients; Row 
 
 ## Admin panel
 
-The panel lives in `admin/` and can be published from GitHub Actions using GitHub Pages. In the repository settings, enable Pages with **GitHub Actions** as its source. The workflow publishes the panel whenever `main` changes. Log in with the Supabase Auth admin created above. Categories support one nested level; categories are editable by name, SF Symbols icon, order, visibility, and parent. Posts can contain text and a PNG/JPG/WebP image up to 4 MB.
+The panel lives in `admin/` and can be published from GitHub Actions using GitHub Pages. In the repository settings, enable Pages with **GitHub Actions** as its source. The workflow publishes the panel whenever `main` changes. Log in with the Supabase Auth admin created above. Categories support one nested level; categories are editable by name, SF Symbols icon, order, visibility, and parent. Posts can contain text and a PNG/JPG/WebP image up to 4 MB. Every Actions run also creates a GitHub Release containing a standalone admin ZIP and this SQL file.
 
 ## iOS app
 
-Open `NexusCommunity.xcodeproj` in Xcode on macOS. The GitHub Actions workflow also produces an **unsigned iOS Simulator app** artifact. That artifact is not an installable iPhone IPA. A device IPA requires macOS/Xcode and an Apple signing certificate and provisioning profile belonging to the app owner.
+Open `NexusCommunity.xcodeproj` in Xcode on macOS. GitHub Actions builds a device-targeted **unsigned IPA** and attaches it to a public GitHub Release for direct download. Import it into ESign and sign it with your own compatible `.p12` certificate and `.mobileprovision` profile. Until signed, the IPA is not installable. A signed app can only be produced using the app owner's certificate/profile.
+
+The release also contains `nexus-community-admin.zip` (self-contained panel files) and `schema.sql`. The Supabase publishable key is in the client configuration; there is no embedded admin password or service-role key. Create an admin login in Supabase Auth and grant it access using the SQL instructions.
 
 ## Configuration
 

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -15,26 +15,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-simulator-build:
+  ios-unsigned-ipa:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Build unsigned iOS simulator app
+      - name: Build unsigned iOS device app
         run: >-
           xcodebuild -project NexusCommunity.xcodeproj
           -scheme NexusCommunity
-          -sdk iphonesimulator
+          -destination 'generic/platform=iOS'
           -configuration Release
           -derivedDataPath build/DerivedData
-          CODE_SIGNING_ALLOWED=NO build
-      - uses: actions/upload-artifact@v4
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= build
+      - name: Package unsigned IPA and admin bundle
+        run: |
+          mkdir -p package/Payload _site/assets
+          ditto build/DerivedData/Build/Products/Release-iphoneos/NexusCommunity.app package/Payload/NexusCommunity.app
+          ditto -c -k --sequesterRsrc package/Payload NEXUS-HACK-unsigned.ipa
+          cp -R admin/. _site/
+          cp NexusCommunity/Assets.xcassets/NexusWolf.imageset/nexus-wolf.png _site/assets/nexus-wolf.png
+          sed -i '' 's#../NexusCommunity/Assets.xcassets/NexusWolf.imageset/nexus-wolf.png#./assets/nexus-wolf.png#g' _site/index.html
+          cd _site && /usr/bin/zip -qry ../nexus-community-admin.zip .
+      - name: Publish direct-download release
+        uses: softprops/action-gh-release@v2
         with:
-          name: nexus-community-ios-simulator-unsigned
-          path: build/DerivedData/Build/Products/Release-iphonesimulator/NexusCommunity.app
-          if-no-files-found: error
+          tag_name: nexus-build-${{ github.run_number }}
+          name: NEXUS HACK build ${{ github.run_number }}
+          body: >-
+            IPA de dispositivo sin firmar. Impórtala en ESign y fírmala con un
+            certificado P12 y perfil mobileprovision propios y compatibles.
+          files: |
+            NEXUS-HACK-unsigned.ipa
+            nexus-community-admin.zip
+            supabase/schema.sql
+          fail_on_unmatched_files: true
 
   admin-pages:
     runs-on: ubuntu-latest
+    continue-on-error: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
