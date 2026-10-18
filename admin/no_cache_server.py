@@ -10,4 +10,4 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    ThreadingHTTPServer(("127.0.0.1", 3105), NoCacheHandler).serve_forever()
+    ThreadingHTTPServer(("127.0.0.1", 8787), NoCacheHandler).serve_forever()

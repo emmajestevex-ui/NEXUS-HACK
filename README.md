@@ -1,10 +1,10 @@
-# greeg app
+# NEXUS HACK
 
-Private client build with Supabase key activation and automatic bundled patches.
+Private NEXUS HACK client with Supabase key activation and automatic remote patches.
 
 ## What this build does
 
-- Shows the app as `greeg app`.
+- Shows the app as `NEXUS HACK`.
 - Requires a Supabase license key before opening the app.
 - Consumes each key one time on the server and binds it to one iOS device ID.
 - Re-checks the license on launch, foreground, and every 10 seconds while active.
@@ -49,8 +49,10 @@ TIO GREEG, only for `TIO-GREEG927394HD`:
 Documents/contentcache/Compulsory/ios/gameassetbundles/avatar/assetindexer.H5ak1JM1Eck~2FxRcJrEp~2FMzeuqmY~3D
 ```
 
-Run `supabase/licenses_setup.sql` before using the app. It disables old numeric keys like `GREEG-1`, adds secure key generation, and creates the admin RPC functions.
+Run the SQL files in `supabase/` in this order: `licenses_setup.sql`, `remote_content_setup.sql`, `admin_emails_setup.sql`, and then `allow_duplicate_remote_patches.sql` if you need duplicate routes. The new license prefix is `NEXUS-` and the special key is `NEXUS-HACK-927394HD`.
 
 Run `supabase/remote_content_setup.sql` to enable remote content releases, `target_path` routing, and the `greeg-content` Storage bucket. The iOS client and the PC panel both use the same Supabase project URL and publishable key; admin writes require Supabase Auth plus a row in `public.license_admins`.
 
-See `GREEG_BUILD_GUIDE.md` for Supabase setup and GitHub Actions build steps.
+The app and admin panel use the Supabase project `oxtyyazqagmfhkgprpsp` and the public publishable key stored in their client configuration. The admin panel runs locally with `admin/start-panel.cmd`; it is intended to be opened at `http://localhost:8787`.
+
+See `GREEG_BUILD_GUIDE.md` for Supabase setup and GitHub Actions build steps. The GitHub Actions workflow produces `NEXUS_HACK_unsigned.ipa`; sign that IPA with your own certificate/profile in ESign.

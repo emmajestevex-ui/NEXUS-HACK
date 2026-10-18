@@ -309,7 +309,7 @@ private struct GreegLicenseView: View {
                     .shadow(color: AppTheme.accent.opacity(0.55), radius: 24)
 
                 VStack(spacing: 7) {
-                    Text("greeg app")
+                    Text("NEXUS HACK")
                         .font(.system(size: 31, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
                     Text("Exclusive client access")
@@ -364,7 +364,7 @@ private struct GreegLicenseView: View {
                     .foregroundStyle(.secondary)
 
                 Spacer()
-                Text("GREEG APP - STAY PRIVATE")
+                Text("NEXUS HACK - STAY PRIVATE")
                     .font(.caption2.weight(.semibold))
                     .tracking(2)
                     .foregroundStyle(.secondary)
@@ -417,8 +417,8 @@ private struct GreegLicenseView: View {
 }
 
 private enum SupabaseLicenseConfig {
-    static let projectURL = URL(string: "https://oqpgabogasnxjejgakrt.supabase.co")!
-    static let publishableKey = "sb_publishable_yL2R4NnUAO5SBP04edbPrg_zWpPFA31"
+    static let projectURL = URL(string: "https://oxtyyazqagmfhkgprpsp.supabase.co")!
+    static let publishableKey = "sb_publishable_IEtNXoVHdutPKd4g_ej0MA_IF-yXUR8"
 }
 
 enum LicenseEntitlements {

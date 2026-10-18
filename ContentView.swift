@@ -97,7 +97,7 @@ struct ContentView: View {
                     )
                 }
             }
-            .navigationTitle("greeg app")
+            .navigationTitle("NEXUS HACK")
             .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
         } detail: {
             sectionContent(selectedVisibleSection)
@@ -290,7 +290,7 @@ private struct DashboardView: View {
                     .shadow(color: AppTheme.accent.opacity(0.35), radius: 12)
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("greeg app")
+                    Text("NEXUS HACK")
                         .font(.system(size: 29, weight: .black, design: .rounded))
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)

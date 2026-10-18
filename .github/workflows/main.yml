@@ -1,4 +1,4 @@
-name: Build GREEG APP IPA
+name: Build NEXUS HACK IPA
 
 on:
   workflow_dispatch:
@@ -21,7 +21,7 @@ jobs:
       - name: Mostrar schemes disponibles
         run: xcodebuild -project ThreeOneOSFive.xcodeproj -list
 
-      - name: Compilar GREEG APP
+      - name: Compilar NEXUS HACK
         run: |
           set -o pipefail
           xcodebuild \
@@ -63,43 +63,43 @@ jobs:
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
 
-          zip -r GREEG_APP_unsigned.ipa Payload
+          zip -r NEXUS_HACK_unsigned.ipa Payload
 
           echo "IPA creada correctamente:"
-          ls -lh GREEG_APP_unsigned.ipa
+          ls -lh NEXUS_HACK_unsigned.ipa
 
       - name: Subir IPA
         uses: actions/upload-artifact@v4
         with:
-          name: GREEG-APP-unsigned
-          path: GREEG_APP_unsigned.ipa
+          name: NEXUS-HACK-unsigned
+          path: NEXUS_HACK_unsigned.ipa
           if-no-files-found: error
           retention-days: 30
 
       - name: Empaquetar panel admin
         run: |
           set -euo pipefail
-          zip -r GREEG_ADMIN_panel.zip admin supabase/remote_content_setup.sql supabase/licenses_setup.sql supabase/admin_emails_setup.sql
-          ls -lh GREEG_ADMIN_panel.zip
+          zip -r NEXUS_HACK_ADMIN_panel.zip admin supabase/remote_content_setup.sql supabase/licenses_setup.sql supabase/admin_emails_setup.sql
+          ls -lh NEXUS_HACK_ADMIN_panel.zip
 
       - name: Subir panel admin
         uses: actions/upload-artifact@v4
         with:
-          name: GREEG-admin-panel
-          path: GREEG_ADMIN_panel.zip
+          name: NEXUS-HACK-admin-panel
+          path: NEXUS_HACK_ADMIN_panel.zip
           if-no-files-found: error
           retention-days: 30
 
       - name: Empaquetar panel de keys
         run: |
           set -euo pipefail
-          zip -r GREEG_KEYS_panel.zip admin supabase/licenses_setup.sql supabase/admin_emails_setup.sql
-          ls -lh GREEG_KEYS_panel.zip
+          zip -r NEXUS_HACK_KEYS_panel.zip admin supabase/licenses_setup.sql supabase/admin_emails_setup.sql
+          ls -lh NEXUS_HACK_KEYS_panel.zip
 
       - name: Subir panel de keys
         uses: actions/upload-artifact@v4
         with:
-          name: GREEG-keys-panel
-          path: GREEG_KEYS_panel.zip
+          name: NEXUS-HACK-keys-panel
+          path: NEXUS_HACK_KEYS_panel.zip
           if-no-files-found: error
           retention-days: 30

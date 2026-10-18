@@ -1,8 +1,8 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-const SUPABASE_URL = "https://oqpgabogasnxjejgakrt.supabase.co";
-const SUPABASE_KEY = "sb_publishable_yL2R4NnUAO5SBP04edbPrg_zWpPFA31";
-const BUCKET = "greeg-content";
+const SUPABASE_URL = "https://oxtyyazqagmfhkgprpsp.supabase.co";
+const SUPABASE_KEY = "sb_publishable_IEtNXoVHdutPKd4g_ej0MA_IF-yXUR8";
+const BUCKET = "nexus-hack-content";
 const SCRIPT_VERSION = "20261005-ios27-install";
 const DEFAULT_TARGET_BUNDLE = "com.dts.freefireth";
 const FREE_FIRE_MAX_BUNDLE = "com.dts.freefiremax";
@@ -456,8 +456,8 @@ async function createKeys(event) {
   const label = els.keyLabelInput.value.trim();
   const capabilities = els.specialAssetIndexerInput.checked ? ["special_assetindexer"] : [];
 
-  if (customKey && !customKey.startsWith("GREEG-")) {
-    els.keysStatusText.textContent = "La key personalizada debe empezar con GREEG-.";
+  if (customKey && !customKey.startsWith("NEXUS-")) {
+    els.keysStatusText.textContent = "La key personalizada debe empezar con NEXUS-.";
     return;
   }
 
@@ -538,7 +538,7 @@ async function saveFile(event) {
     return;
   }
   if (!targetPath) {
-    setStatus("Completa la ruta que va a reemplazar en GREEG APP.");
+    setStatus("Completa la ruta que va a reemplazar en NEXUS HACK.");
     return;
   }
   if (!isCompleteTargetPath(targetPath)) {

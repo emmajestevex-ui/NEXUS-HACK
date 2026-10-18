@@ -21,7 +21,7 @@ begin
         return json_build_object('success', false, 'message', 'Invalid key', 'capabilities', json_build_array(), 'expires_at', null);
     end if;
 
-    if v_key ~ '^GREEG-[0-9]+$' then
+    if v_key ~ '^NEXUS-[0-9]+$' then
         return json_build_object('success', false, 'message', 'Old numeric keys are disabled', 'capabilities', json_build_array(), 'expires_at', null);
     end if;
 
@@ -104,7 +104,7 @@ begin
         return json_build_object('success', false, 'message', 'Invalid key', 'capabilities', json_build_array(), 'expires_at', null);
     end if;
 
-    if v_key ~ '^GREEG-[0-9]+$' then
+    if v_key ~ '^NEXUS-[0-9]+$' then
         return json_build_object('success', false, 'message', 'Old numeric keys are disabled', 'capabilities', json_build_array(), 'expires_at', null);
     end if;
 

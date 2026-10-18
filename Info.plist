@@ -5,15 +5,15 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>greeg app</string>
+	<string>NEXUS HACK</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.apple.mobile.MobileHouseArrest</string>
+	<string>com.emmajestevex.nexushack</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>greeg app</string>
+	<string>NEXUS HACK</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -32,11 +32,11 @@
 		<string>shareddocuments</string>
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>greeg app does not need photo access for the bundled patch flow.</string>
+	<string>NEXUS HACK does not need photo access for the bundled patch flow.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
-	<string>greeg app needs document access only for local app support files.</string>
+	<string>NEXUS HACK needs document access only for local app support files.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>GREEG APP usa la red local solo para el flujo de pairing autorizado por el usuario.</string>
+	<string>NEXUS HACK usa la red local solo para el flujo de pairing autorizado por el usuario.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

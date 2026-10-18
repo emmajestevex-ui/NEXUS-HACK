@@ -1,4 +1,4 @@
-name: Build GREEG APP IPA
+name: Build NEXUS HACK IPA
 
 on:
   workflow_dispatch:
@@ -20,7 +20,7 @@ jobs:
       - name: Mostrar schemes disponibles
         run: xcodebuild -project ThreeOneOSFive.xcodeproj -list
 
-      - name: Compilar GREEG APP
+      - name: Compilar NEXUS HACK
         run: |
           set -euo pipefail
           set +e
@@ -58,16 +58,16 @@ jobs:
             echo "ERROR: No se encontro la aplicacion compilada."
             exit 1
           fi
-          rm -rf Payload GREEG_APP_unsigned.ipa
+          rm -rf Payload NEXUS_HACK_unsigned.ipa
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          zip -r GREEG_APP_unsigned.ipa Payload
-          ls -lh GREEG_APP_unsigned.ipa
+          zip -r NEXUS_HACK_unsigned.ipa Payload
+          ls -lh NEXUS_HACK_unsigned.ipa
 
       - name: Subir IPA
         uses: actions/upload-artifact@v4
         with:
-          name: GREEG-APP-unsigned
-          path: GREEG_APP_unsigned.ipa
+          name: NEXUS-HACK-unsigned
+          path: NEXUS_HACK_unsigned.ipa
           if-no-files-found: error
           retention-days: 30

@@ -123,7 +123,7 @@ private struct GreegHomeView: View {
                         .shadow(color: AppTheme.accent.opacity(0.28), radius: 10)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("GREEG APP")
+                        Text("NEXUS HACK")
                             .font(.system(size: 24, weight: .black, design: .rounded))
                             .lineLimit(1)
                             .minimumScaleFactor(0.68)
@@ -359,7 +359,7 @@ private struct GreegPatchLibraryView: View {
             HStack(spacing: 12) {
                 AppLogo(size: 40)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Centro GREEG")
+                    Text("Centro NEXUS HACK")
                         .font(.headline.weight(.black))
                     Text("\(visibleItems.count) archivos privados")
                         .font(.caption.weight(.semibold))
@@ -415,7 +415,7 @@ private struct GreegPatchLibraryView: View {
 
     private static func discardReason(for project: PatchProject) -> String? {
         if !isGreegManaged(project) {
-            return "sin-metadatos-greeg"
+            return "sin-metadatos-nexus"
         }
         if project.rules.isEmpty && project.directories.isEmpty {
             return "sin-reglas-o-rutas"
@@ -607,7 +607,7 @@ private struct GreegPatchRow: View {
                 )
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(project?.name ?? "Archivo GREEG")
+                    Text(project?.name ?? "Archivo NEXUS HACK")
                         .font(.headline.weight(.black))
                         .foregroundStyle(.white)
                         .lineLimit(2)
@@ -626,7 +626,7 @@ private struct GreegPatchRow: View {
     }
 
     private var iconName: String {
-        let name = (project?.name ?? "Archivo GREEG").lowercased()
+        let name = (project?.name ?? "Archivo NEXUS HACK").lowercased()
         if name.contains("cuello") {
             return "link.circle.fill"
         }
@@ -718,7 +718,7 @@ private struct GreegPatchDetailView: View {
                 HStack(spacing: 14) {
                     AppRowIcon(systemName: kind.iconName, tint: kind.tint, symbolSize: 16, frameSize: 40)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(project?.name ?? "Archivo GREEG")
+                        Text(project?.name ?? "Archivo NEXUS HACK")
                             .font(.system(size: 24, weight: .black, design: .rounded))
                             .lineLimit(2)
                             .minimumScaleFactor(0.75)
@@ -1057,7 +1057,7 @@ private struct GreegSocialView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Redes oficiales")
                             .font(.system(size: 26, weight: .black, design: .rounded))
-                        Text("Canal privado de GREEG APP.")
+                        Text("Canal privado de NEXUS HACK.")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
