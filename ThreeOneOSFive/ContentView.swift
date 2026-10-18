@@ -649,6 +649,10 @@ private struct GreegHomeView: View {
             .onAppear {
                 remoteContentStore.loadLocalState()
                 store.reload()
+                if isUnlocked {
+                    BundledPatchSeeder.seedIfNeeded()
+                    remoteContentStore.syncIfPossible(force: true)
+                }
                 guard !reduceMotion else { return }
                 withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
                     logoIsBreathing = true
