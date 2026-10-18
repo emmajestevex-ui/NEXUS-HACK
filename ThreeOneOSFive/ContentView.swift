@@ -419,7 +419,7 @@ private extension RemoteContentFile {
     var nexusThumbnailURL: URL? {
         guard let description,
               let match = description.range(of: #"\[NEXUS_IMAGE:([^\]]+)\]"#, options: .regularExpression) else { return nil }
-        let token = String(description[match]).replacingOccurrences(of: "[NEXUS_IMAGE:", with: "").dropLast()
+        let token = String(String(description[match]).replacingOccurrences(of: "[NEXUS_IMAGE:", with: "").dropLast())
         guard !token.isEmpty else { return nil }
         return URL(string: "\(SupabaseLicenseConfig.projectURL.absoluteString)/storage/v1/object/public/nexus-hack-content/\(token.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? token)")
     }
