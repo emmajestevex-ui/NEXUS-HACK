@@ -350,6 +350,7 @@ private struct GreegLicenseView: View {
     @State private var didActivate = false
     @State private var isLoading = false
     @State private var revealContent = false
+    @State private var ringRotation = 0.0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let client = SupabaseLicenseClient()
     let onSuccess: () -> Void
@@ -376,6 +377,7 @@ private struct GreegLicenseView: View {
                                 style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
                             )
                             .rotationEffect(.degrees(-90))
+                            .rotationEffect(.degrees(ringRotation))
                             .animation(NexusMotionPolicy.animation(reduceMotion: reduceMotion, normal: .easeInOut(duration: 0.8)), value: revealContent)
                         AppLogo(size: 104)
                             .shadow(color: NexusTheme.blue.opacity(0.38), radius: 24)
@@ -456,6 +458,9 @@ private struct GreegLicenseView: View {
             } else {
                 withAnimation(.easeInOut(duration: 0.8).delay(0.15)) {
                     revealContent = true
+                }
+                withAnimation(.linear(duration: 2.2).repeatForever(autoreverses: false)) {
+                    ringRotation = 360
                 }
             }
         }

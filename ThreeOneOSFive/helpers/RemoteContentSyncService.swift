@@ -281,7 +281,9 @@ struct NexusAppContent: Codable, Equatable {
         NexusAppTab(id: "home", title: "Inicio", icon: "house.fill", kind: "home", sortOrder: 0),
         NexusAppTab(id: "files", title: "Archivos", icon: "shippingbox.fill", kind: "files", sortOrder: 1),
         NexusAppTab(id: "installation", title: "Instalación", icon: "wrench.and.screwdriver.fill", kind: "installation", sortOrder: 2),
-        NexusAppTab(id: "socials", title: "Redes", icon: "link.circle.fill", kind: "socials", sortOrder: 3)
+        NexusAppTab(id: "socials", title: "Redes", icon: "link.circle.fill", kind: "socials", sortOrder: 3),
+        NexusAppTab(id: "membership", title: "Membresía", icon: "person.crop.circle.fill", kind: "membership", sortOrder: 4),
+        NexusAppTab(id: "support", title: "Soporte", icon: "headphones.circle.fill", kind: "support", sortOrder: 5)
     ]
     static let empty = NexusAppContent(title: "NEXUS HACK", subtitle: "Control privado", announcement: nil, categories: [], socials: [], tabs: defaultTabs)
 

@@ -1,14 +1,5 @@
--- NEXUS HACK - COMPLETE SUPABASE SETUP
--- Paste this entire file into the Supabase SQL Editor and click Run.
--- Includes licenses, remote files, categories, tabs, icons, admin emails and RPC refresh.
--- This script does not contain a service-role key.
-
-
-
--- ============================================================
--- SECTION 1: licenses_setup.sql
--- ============================================================
-
+-- NEXUS HACK - COMPLETE SUPABASE SETUP`r`n-- Generated from the maintained setup files.`r`n
+-- ===== supabase/licenses_setup.sql =====
 create extension if not exists pgcrypto with schema extensions;
 
 create table if not exists public.licenses (
@@ -822,12 +813,7 @@ grant execute on function public.admin_set_license_status(text, text) to authent
 grant execute on function public.admin_set_license_expiration(text, timestamptz) to authenticated;
 grant execute on function public.admin_delete_license(text) to authenticated;
 
-
-
--- ============================================================
--- SECTION 2: remote_content_setup.sql
--- ============================================================
-
+-- ===== supabase/remote_content_setup.sql =====
 create extension if not exists pgcrypto with schema extensions;
 
 create table if not exists public.license_admins (
@@ -948,7 +934,9 @@ values (
         {"id": "home", "title": "Inicio", "icon": "house.fill", "kind": "home", "enabled": true, "sort_order": 0},
         {"id": "files", "title": "Archivos", "icon": "shippingbox.fill", "kind": "files", "enabled": true, "sort_order": 1},
         {"id": "installation", "title": "Instalacion", "icon": "wrench.and.screwdriver.fill", "kind": "installation", "enabled": true, "sort_order": 2},
-        {"id": "socials", "title": "Redes", "icon": "link.circle.fill", "kind": "socials", "enabled": true, "sort_order": 3}
+        {"id": "socials", "title": "Redes", "icon": "link.circle.fill", "kind": "socials", "enabled": true, "sort_order": 3},
+        {"id": "membership", "title": "Membresia", "icon": "person.crop.circle.fill", "kind": "membership", "enabled": true, "sort_order": 4},
+        {"id": "support", "title": "Soporte", "icon": "headphones.circle.fill", "kind": "support", "enabled": true, "sort_order": 5}
       ],
       "socials": [
         {"title": "Discord", "subtitle": "Comunidad NEXUS HACK", "url": "https://discord.gg/9NUBpqNGQ", "icon": "bubble.left.and.bubble.right.fill", "color": "blue"},
@@ -1702,12 +1690,7 @@ grant execute on function public.get_remote_content_manifest(text, text, text, t
 grant execute on function public.admin_get_app_settings() to authenticated;
 grant execute on function public.admin_update_app_settings(jsonb) to authenticated;
 
-
-
--- ============================================================
--- SECTION 3: admin_emails_setup.sql
--- ============================================================
-
+-- ===== supabase/admin_emails_setup.sql =====
 create table if not exists public.license_admins (
     user_id uuid primary key references auth.users(id) on delete cascade,
     role text not null default 'founder',
@@ -1751,12 +1734,7 @@ set role = excluded.role;
 
 grant execute on function public.is_license_admin() to authenticated;
 
-
-
--- ============================================================
--- SECTION 4: allow_duplicate_remote_patches.sql
--- ============================================================
-
+-- ===== supabase/allow_duplicate_remote_patches.sql =====
 drop index if exists public.remote_content_files_target_path_idx;
 drop index if exists public.remote_content_files_target_bundle_path_idx;
 
@@ -1922,12 +1900,7 @@ $$;
 revoke all on function public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean) from public;
 grant execute on function public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean) to authenticated;
 
-
-
--- ============================================================
--- SECTION 5: activate_license.sql
--- ============================================================
-
+-- ===== supabase/activate_license.sql =====
 -- For a fresh install run supabase/licenses_setup.sql first. This file only
 -- refreshes the client RPC functions after the secure key tables exist.
 
@@ -2086,5 +2059,4 @@ revoke all on function public.activate_license(text, text) from public;
 revoke all on function public.check_license(text, text) from public;
 grant execute on function public.activate_license(text, text) to anon, authenticated;
 grant execute on function public.check_license(text, text) to anon, authenticated;
-
 

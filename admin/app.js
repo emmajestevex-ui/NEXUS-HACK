@@ -486,7 +486,9 @@ const DEFAULT_APP_CONTENT = {
     { id: "home", title: "Inicio", icon: "house.fill", kind: "home", enabled: true, sort_order: 0 },
     { id: "files", title: "Archivos", icon: "shippingbox.fill", kind: "files", enabled: true, sort_order: 1 },
     { id: "installation", title: "Instalación", icon: "wrench.and.screwdriver.fill", kind: "installation", enabled: true, sort_order: 2 },
-    { id: "socials", title: "Redes", icon: "link.circle.fill", kind: "socials", enabled: true, sort_order: 3 }
+    { id: "socials", title: "Redes", icon: "link.circle.fill", kind: "socials", enabled: true, sort_order: 3 },
+    { id: "membership", title: "Membresía", icon: "person.crop.circle.fill", kind: "membership", enabled: true, sort_order: 4 },
+    { id: "support", title: "Soporte", icon: "headphones.circle.fill", kind: "support", enabled: true, sort_order: 5 }
   ],
   socials: [
     { title: "Discord", subtitle: "Comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue" },

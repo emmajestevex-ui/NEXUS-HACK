@@ -51,8 +51,16 @@ struct ContentView: View {
     }
 
     private var visibleTabs: [NexusAppTab] {
-        let configured = remoteContentStore.appContent.tabs.filter(\.enabled).sorted { $0.sortOrder < $1.sortOrder }
-        return configured.isEmpty ? NexusAppContent.defaultTabs : configured
+        let configured = remoteContentStore.appContent.tabs
+        if configured.isEmpty { return NexusAppContent.defaultTabs }
+
+        let configuredIDs = Set(configured.map(\.id))
+        let builtInAdditions = NexusAppContent.defaultTabs.filter {
+            ($0.kind == "membership" || $0.kind == "support") && !configuredIDs.contains($0.id)
+        }
+        return (configured + builtInAdditions)
+            .filter(\.enabled)
+            .sorted { $0.sortOrder < $1.sortOrder }
     }
 
     @ViewBuilder
@@ -68,12 +76,208 @@ struct ContentView: View {
             GreegInstallationView()
         case "socials":
             GreegSocialView()
+        case "membership":
+            NexusMembershipView(onSignOut: onSignOut)
+        case "support":
+            NexusSupportView(socials: remoteContentStore.appContent.socials)
         default:
             if let category = remoteContentStore.appContent.categories.first(where: { $0.id == tab.id }) {
                 NexusCategoryTabView(category: category)
             } else {
                 EmptyView()
             }
+        }
+    }
+}
+
+private struct NexusMembershipView: View {
+    @AppStorage("greeg.license.key") private var storedKey = ""
+    @AppStorage("greeg.license.supabaseUnlocked") private var isUnlocked = false
+    @State private var showingDeactivateConfirmation = false
+    let onSignOut: () -> Void
+
+    private var maskedKey: String {
+        let clean = storedKey.normalizedLicenseKey
+        guard clean.count > 8 else { return clean.isEmpty ? "Sin key activa" : "••••••••" }
+        return "\(clean.prefix(4))••••\(clean.suffix(4))"
+    }
+
+    private var expirationText: String {
+        guard let date = LicenseEntitlements.storedExpirationDate() else { return "Sin fecha definida" }
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("MEMBRESÍA")
+                        .font(.caption.weight(.black))
+                        .tracking(1.2)
+                        .foregroundStyle(NexusTheme.secondaryText)
+                        .padding(.leading, 4)
+
+                    NexusCard(style: .elevated) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            HStack(spacing: 12) {
+                                NexusIconTile(
+                                    systemName: isUnlocked ? "checkmark.seal.fill" : "lock.fill",
+                                    tint: isUnlocked ? NexusTheme.success : NexusTheme.secondaryText,
+                                    size: 48
+                                )
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(isUnlocked ? "Membresía activa" : "Sin membresía")
+                                        .font(.title3.weight(.black))
+                                    Text(isUnlocked ? "Acceso verificado a NEXUS HACK" : "Activa tu key para continuar")
+                                        .font(.subheadline)
+                                        .foregroundStyle(NexusTheme.secondaryText)
+                                }
+                                Spacer()
+                                NexusBadge(title: isUnlocked ? "PRO" : "LOCKED", tint: isUnlocked ? NexusTheme.success : NexusTheme.secondaryText)
+                            }
+
+                            Divider().overlay(Color.white.opacity(0.08))
+
+                            MembershipDetailRow(icon: "key.fill", title: "Clave", value: maskedKey, tint: NexusTheme.blueBright)
+                            MembershipDetailRow(icon: "clock.fill", title: "Estado", value: isUnlocked ? "Activa" : "Inactiva", tint: isUnlocked ? NexusTheme.success : NexusTheme.secondaryText)
+                            MembershipDetailRow(icon: "calendar", title: "Expiración", value: expirationText, tint: NexusTheme.blueBright)
+
+                            Button {
+                                showingDeactivateConfirmation = true
+                            } label: {
+                                Label("Desactivar key", systemImage: "xmark.circle.fill")
+                                    .font(.headline.weight(.bold))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 13)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(NexusTheme.danger)
+                            .buttonBorderShape(.roundedRectangle(radius: 16))
+                            .disabled(!isUnlocked)
+                        }
+                    }
+                    .nexusEntrance(index: 0)
+
+                    if !isUnlocked {
+                        NexusCard {
+                            HStack(spacing: 12) {
+                                NexusIconTile(systemName: "key.fill", tint: NexusTheme.blue, size: 42)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("Activar membresía")
+                                        .font(.headline.weight(.bold))
+                                    Text("Escribe tu código de acceso seguro")
+                                        .font(.subheadline)
+                                        .foregroundStyle(NexusTheme.secondaryText)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(NexusTheme.secondaryText)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { onSignOut() }
+                        .nexusEntrance(index: 1)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 30)
+            }
+            .background(NexusBackground { Color.clear }.ignoresSafeArea())
+            .navigationTitle("Membresía")
+            .navigationBarTitleDisplayMode(.inline)
+            .alert("Desactivar key", isPresented: $showingDeactivateConfirmation) {
+                Button("Cancelar", role: .cancel) {}
+                Button("Desactivar", role: .destructive) { onSignOut() }
+            } message: {
+                Text("Se eliminará la key guardada en este dispositivo y tendrás que activarla de nuevo.")
+            }
+        }
+    }
+}
+
+private struct MembershipDetailRow: View {
+    let icon: String
+    let title: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 11) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 24)
+            Text(title)
+                .foregroundStyle(NexusTheme.secondaryText)
+            Spacer()
+            Text(value)
+                .font(.subheadline.weight(.semibold).monospaced())
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+    }
+}
+
+private struct NexusSupportView: View {
+    let socials: [NexusAppSocial]
+
+    private var supportLinks: [NexusAppSocial] {
+        if !socials.isEmpty { return socials }
+        return [
+            NexusAppSocial(title: "Discord", subtitle: "Soporte y comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue"),
+            NexusAppSocial(title: "TikTok", subtitle: "Novedades y contenido", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black")
+        ]
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    VStack(spacing: 8) {
+                        Image(systemName: "headphones.circle.fill")
+                            .font(.system(size: 64, weight: .medium))
+                            .foregroundStyle(.white)
+                        Text("Centro de soporte")
+                            .font(.largeTitle.weight(.black))
+                        Text("Ayuda, anuncios y comunidad NEXUS HACK")
+                            .font(.subheadline)
+                            .foregroundStyle(NexusTheme.secondaryText)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.vertical, 18)
+                    .nexusEntrance(index: 0)
+
+                    ForEach(Array(supportLinks.enumerated()), id: \.element.id) { index, social in
+                        if let url = URL(string: social.url) {
+                            Link(destination: url) {
+                                NexusCard {
+                                    HStack(spacing: 12) {
+                                        NexusIconTile(systemName: social.icon, tint: social.color.lowercased() == "black" ? .white : NexusTheme.blue, size: 44)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(social.title).font(.headline.weight(.bold))
+                                            Text(social.subtitle).font(.subheadline).foregroundStyle(NexusTheme.secondaryText)
+                                        }
+                                        Spacer()
+                                        Image(systemName: "arrow.up.right")
+                                            .font(.headline.weight(.bold))
+                                            .foregroundStyle(NexusTheme.blueBright)
+                                    }
+                                }
+                            }
+                            .buttonStyle(NexusPressStyle())
+                            .nexusEntrance(index: index + 1)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 30)
+            }
+            .background(NexusBackground { Color.clear }.ignoresSafeArea())
+            .navigationTitle("Soporte")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }
