@@ -5,24 +5,41 @@ struct ContentView: View {
     @EnvironmentObject private var patchDraftCoordinator: PatchDraftCoordinator
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
     @State private var tabNavigation = AppTabNavigationState()
+    @State private var showingMoreTabs = false
+    @Namespace private var dockNamespace
     let onSignOut: () -> Void
 
     var body: some View {
-        TabView(selection: tabSelection) {
-            ForEach(Array(visibleTabs.enumerated()), id: \.element.id) { offset, tab in
-                tabView(for: tab)
-                    .tabItem { CompactTabLabel(title: tab.title, systemImage: tab.icon, iconURL: tab.iconURL) }
-                    .tag(offset)
+        ZStack(alignment: .bottom) {
+            TabView(selection: tabSelection) {
+                ForEach(Array(visibleTabs.enumerated()), id: \.element.id) { offset, tab in
+                    tabView(for: tab)
+                        .tag(offset)
+                }
             }
+            .toolbar(.hidden, for: .tabBar)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear.frame(height: 92)
+            }
+
+            NexusDock(
+                tabs: visibleTabs,
+                selection: tabSelection,
+                namespace: dockNamespace,
+                onMore: { showingMoreTabs = true }
+            )
+            .padding(.horizontal, 14)
+            .padding(.bottom, 8)
         }
-        .tint(AppTheme.accent)
-        .imageScale(.small)
         .animation(.easeInOut(duration: 0.22), value: tabNavigation.selectedTab)
         .onChange(of: patchDraftCoordinator.request?.id) { requestID in
             if requestID != nil, let index = visibleTabs.firstIndex(where: { $0.kind == "files" }) { tabNavigation.select(index) }
         }
         .onChange(of: patchDraftCoordinator.importRequest?.id) { requestID in
             if requestID != nil, let index = visibleTabs.firstIndex(where: { $0.kind == "files" }) { tabNavigation.select(index) }
+        }
+        .sheet(isPresented: $showingMoreTabs) {
+            NexusMoreTabsSheet(tabs: Array(visibleTabs.dropFirst(4)), baseIndex: 4, selection: tabSelection)
         }
     }
 
@@ -58,6 +75,139 @@ struct ContentView: View {
                 EmptyView()
             }
         }
+    }
+}
+
+private struct NexusDock: View {
+    let tabs: [NexusAppTab]
+    @Binding var selection: Int
+    let namespace: Namespace.ID
+    let onMore: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var showsMore: Bool { tabs.count > 5 }
+    private var displayedTabs: ArraySlice<NexusAppTab> { tabs.prefix(showsMore ? 4 : 5) }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(displayedTabs.enumerated()), id: \.element.id) { index, tab in
+                dockButton(tab: tab, index: index)
+            }
+
+            if showsMore {
+                Button(action: onMore) {
+                    VStack(spacing: 4) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 18, weight: .bold))
+                        Text("Más")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(NexusTheme.secondaryText)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                }
+                .buttonStyle(NexusPressStyle())
+                .accessibilityLabel("Más pestañas")
+            }
+        }
+        .padding(8)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background(NexusTheme.surface.opacity(0.78), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(Color.white.opacity(0.16), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.45), radius: 18, y: 8)
+    }
+
+    @ViewBuilder
+    private func dockButton(tab: NexusAppTab, index: Int) -> some View {
+        let isSelected = selection == index
+        Button {
+            if selection != index { NexusHaptics.selection() }
+            selection = index
+        } label: {
+            VStack(spacing: 4) {
+                NexusDockIcon(tab: tab, isSelected: isSelected)
+                Text(tab.title)
+                    .font(.caption2.weight(isSelected ? .bold : .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(isSelected ? NexusTheme.blueBright : NexusTheme.secondaryText)
+            .frame(maxWidth: .infinity)
+            .frame(height: 54)
+            .background {
+                if isSelected {
+                    Capsule(style: .continuous)
+                        .fill(NexusTheme.elevatedSurface)
+                        .overlay(Capsule().stroke(NexusTheme.blue.opacity(0.42), lineWidth: 1))
+                        .matchedGeometryEffect(id: "nexus-dock-selection", in: namespace)
+                }
+            }
+        }
+        .buttonStyle(NexusPressStyle())
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .animation(NexusMotionPolicy.animation(reduceMotion: reduceMotion, normal: .spring(response: 0.38, dampingFraction: 0.8)), value: selection)
+    }
+}
+
+private struct NexusDockIcon: View {
+    let tab: NexusAppTab
+    let isSelected: Bool
+
+    var body: some View {
+        Group {
+            if let iconURL = tab.iconURL, let url = URL(string: iconURL) {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFit()
+                    } else {
+                        Image(systemName: tab.icon)
+                    }
+                }
+            } else {
+                Image(systemName: tab.icon)
+            }
+        }
+        .font(.system(size: 19, weight: isSelected ? .bold : .medium))
+        .frame(height: 21)
+    }
+}
+
+private struct NexusMoreTabsSheet: View {
+    let tabs: [NexusAppTab]
+    let baseIndex: Int
+    @Binding var selection: Int
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(Array(tabs.enumerated()), id: \.element.id) { offset, tab in
+                Button {
+                    selection = baseIndex + offset
+                    dismiss()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: tab.icon)
+                            .frame(width: 26)
+                            .foregroundStyle(NexusTheme.blue)
+                        Text(tab.title)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if selection == baseIndex + offset {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(NexusTheme.success)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .navigationTitle("Más secciones")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 
