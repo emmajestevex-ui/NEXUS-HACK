@@ -18,6 +18,7 @@ struct ThreeOneOSFiveApp: App {
     @State private var licenseValidationPending = true
     @State private var showAttribution = false
     @State private var updateOffer: AppUpdateChecker.Offer?
+    @State private var showLaunchExperience = true
     @Environment(\.scenePhase) private var scenePhase
     private let licenseGateEnabled = true
     private let licensePoller = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
@@ -144,48 +145,48 @@ struct ThreeOneOSFiveApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                if !licenseGateEnabled || licenseUnlocked {
-                    if licenseGateEnabled && licenseValidationPending {
-                        LicenseCheckingView()
-                    } else {
-                        ContentView(onSignOut: signOutLicense)
-                        .environmentObject(appState)
-                        .environmentObject(patchDraftCoordinator)
-                        .environmentObject(fileOperationCoordinator)
-                        .environmentObject(remoteContentStore)
-                        .environmentObject(patchStore)
-                        .environmentObject(repositoryStore)
-                        .environment(\.appLanguage, language)
-                        .environment(\.locale, language.locale)
-                        .patchStorePresentation(patchStore)
-                        .repositoryStorePresentation(repositoryStore, patchStore: patchStore)
-                        .opacity(showOnboarding ? 0 : 1)
-                        .allowsHitTesting(!showOnboarding)
+                ContentView(
+                    onSignOut: signOutLicense,
+                    onLicenseActivated: prepareUnlockedApp
+                )
+                .environmentObject(appState)
+                .environmentObject(patchDraftCoordinator)
+                .environmentObject(fileOperationCoordinator)
+                .environmentObject(remoteContentStore)
+                .environmentObject(patchStore)
+                .environmentObject(repositoryStore)
+                .environment(\.appLanguage, language)
+                .environment(\.locale, language.locale)
+                .patchStorePresentation(patchStore)
+                .repositoryStorePresentation(repositoryStore, patchStore: patchStore)
+                .opacity(showOnboarding ? 0 : 1)
+                .allowsHitTesting(!showOnboarding && !showLaunchExperience)
 
-                        if showOnboarding {
-                        OnboardingView {
-                            OnboardingStore.markCompleted()
-                            withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
-                                showOnboarding = false
-                            }
-                            appState.detectSupport()
+                if showOnboarding {
+                    OnboardingView {
+                        OnboardingStore.markCompleted()
+                        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                            showOnboarding = false
                         }
-                        .environment(\.appLanguage, language)
-                        .environment(\.locale, language.locale)
-                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                        .zIndex(1)
+                        appState.detectSupport()
+                    }
+                    .environment(\.appLanguage, language)
+                    .environment(\.locale, language.locale)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .zIndex(2)
+                }
+
+                if showLaunchExperience {
+                    NexusLaunchExperience {
+                        withAnimation(.easeOut(duration: 0.35)) {
+                            showLaunchExperience = false
                         }
                     }
-                } else {
-                    GreegLicenseView(initialMessage: licenseMessage) {
-                        licenseValidationPending = false
-                        licenseUnlocked = true
-                        prepareUnlockedApp()
-                    }
+                    .zIndex(3)
                 }
             }
             .preferredColorScheme(.dark)
-            .displayIdentityAttribution(isPresented: $showAttribution, enabled: (!licenseGateEnabled || licenseUnlocked) && !showOnboarding)
+            .displayIdentityAttribution(isPresented: $showAttribution, enabled: !showOnboarding && !showLaunchExperience)
             .sheet(isPresented: $showAttribution) {
                 DisplayAttributionSheet()
             }
@@ -322,6 +323,71 @@ class AppState: ObservableObject {
     }
 }
 
+private struct NexusLaunchExperience: View {
+    let onFinished: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var ringRotation = 0.0
+    @State private var reveal = false
+    @State private var didFinish = false
+
+    var body: some View {
+        NexusBackground {
+            VStack(spacing: 18) {
+                ZStack {
+                    Circle()
+                        .stroke(NexusTheme.blue.opacity(0.16), lineWidth: 2)
+                    Circle()
+                        .trim(from: 0.08, to: 0.82)
+                        .stroke(
+                            AngularGradient(colors: [NexusTheme.blue, NexusTheme.blueBright, .white, NexusTheme.blue], center: .center),
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(ringRotation))
+                    AppLogo(size: 104)
+                        .shadow(color: NexusTheme.blue.opacity(0.42), radius: 24)
+                }
+                .frame(width: 140, height: 140)
+                .scaleEffect(reveal ? 1 : 0.82)
+                .opacity(reveal ? 1 : 0)
+
+                VStack(spacing: 6) {
+                    Text("NEXUS HACK")
+                        .font(.system(size: 31, weight: .black, design: .rounded))
+                        .foregroundStyle(LinearGradient(colors: [.white, NexusTheme.blueBright], startPoint: .leading, endPoint: .trailing))
+                    Text("Preparando tu centro privado")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(NexusTheme.secondaryText)
+                }
+                .opacity(reveal ? 1 : 0)
+                .offset(y: reveal ? 0 : 10)
+            }
+        }
+        .onAppear {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.55, dampingFraction: 0.82)) {
+                reveal = true
+            }
+
+            guard !reduceMotion else {
+                finish(after: 0.45)
+                return
+            }
+
+            withAnimation(.linear(duration: 1.9).repeatForever(autoreverses: false)) {
+                ringRotation = 360
+            }
+            finish(after: 1.65)
+        }
+    }
+
+    private func finish(after delay: Double) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard !didFinish else { return }
+            didFinish = true
+            onFinished()
+        }
+    }
+}
+
 
 private struct LicenseCheckingView: View {
     var body: some View {
@@ -344,7 +410,7 @@ private struct LicenseCheckingView: View {
 }
 
 
-private struct GreegLicenseView: View {
+struct GreegLicenseView: View {
     @State private var key: String
     @State private var messageText = ""
     @State private var didActivate = false

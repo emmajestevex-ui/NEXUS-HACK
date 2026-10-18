@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var showingMoreTabs = false
     @Namespace private var dockNamespace
     let onSignOut: () -> Void
+    let onLicenseActivated: () -> Void
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -77,7 +78,7 @@ struct ContentView: View {
         case "socials":
             GreegSocialView()
         case "membership":
-            NexusMembershipView(onSignOut: onSignOut)
+            NexusMembershipView(onSignOut: onSignOut, onLicenseActivated: onLicenseActivated)
         case "support":
             NexusSupportView(socials: remoteContentStore.appContent.socials)
         default:
@@ -94,7 +95,9 @@ private struct NexusMembershipView: View {
     @AppStorage("greeg.license.key") private var storedKey = ""
     @AppStorage("greeg.license.supabaseUnlocked") private var isUnlocked = false
     @State private var showingDeactivateConfirmation = false
+    @State private var showingLicenseSheet = false
     let onSignOut: () -> Void
+    let onLicenseActivated: () -> Void
 
     private var maskedKey: String {
         let clean = storedKey.normalizedLicenseKey
@@ -175,7 +178,7 @@ private struct NexusMembershipView: View {
                             }
                         }
                         .contentShape(Rectangle())
-                        .onTapGesture { onSignOut() }
+                        .onTapGesture { showingLicenseSheet = true }
                         .nexusEntrance(index: 1)
                     }
                 }
@@ -186,6 +189,12 @@ private struct NexusMembershipView: View {
             .background(NexusBackground { Color.clear }.ignoresSafeArea())
             .navigationTitle("Membresía")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showingLicenseSheet) {
+                GreegLicenseView {
+                    onLicenseActivated()
+                    showingLicenseSheet = false
+                }
+            }
             .alert("Desactivar key", isPresented: $showingDeactivateConfirmation) {
                 Button("Cancelar", role: .cancel) {}
                 Button("Desactivar", role: .destructive) { onSignOut() }
