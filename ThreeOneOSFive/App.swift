@@ -19,7 +19,7 @@ struct ThreeOneOSFiveApp: App {
     @State private var showAttribution = false
     @State private var updateOffer: AppUpdateChecker.Offer?
     @Environment(\.scenePhase) private var scenePhase
-    private let licenseGateEnabled = false
+    private let licenseGateEnabled = true
     private let licensePoller = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     init() {
@@ -106,6 +106,17 @@ struct ThreeOneOSFiveApp: App {
         licenseUnlocked = false
     }
 
+    private func signOutLicense() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "greeg.license.key")
+        defaults.removeObject(forKey: "greeg.license.device")
+        defaults.set(false, forKey: "greeg.license.supabaseUnlocked")
+        LicenseEntitlements.clear()
+        licenseMessage = "Sesion cerrada. Introduce una key para continuar."
+        licenseValidationPending = false
+        licenseUnlocked = false
+    }
+
     private func prepareUnlockedApp() {
         BundledPatchSeeder.seedIfNeeded()
         patchStore.reload()
@@ -121,7 +132,7 @@ struct ThreeOneOSFiveApp: App {
                     if licenseGateEnabled && licenseValidationPending {
                         LicenseCheckingView()
                     } else {
-                        ContentView()
+                        ContentView(onSignOut: signOutLicense)
                         .environmentObject(appState)
                         .environmentObject(patchDraftCoordinator)
                         .environmentObject(fileOperationCoordinator)
@@ -305,10 +316,10 @@ private struct LicenseCheckingView: View {
                     .shadow(color: AppTheme.accent.opacity(0.45), radius: 18)
                 ProgressView()
                     .tint(AppTheme.accent)
-                Text("Verifying key")
+                Text("Verificando acceso")
                     .font(.headline)
                     .foregroundStyle(.white)
-                Text("Checking access with Supabase")
+                Text("Comprobando tu key segura")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -343,7 +354,7 @@ private struct GreegLicenseView: View {
                     Text("NEXUS HACK")
                         .font(.system(size: 31, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
-                    Text("Exclusive client access")
+                    Text("Acceso privado")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -352,7 +363,7 @@ private struct GreegLicenseView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "key.fill")
                             .foregroundStyle(AppTheme.accent)
-                        TextField("NEXUS-ABCD-EF12-3456", text: $key)
+                            TextField("NEXUS-ABCD-EF12-3456", text: $key)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
                             .foregroundStyle(.white)
@@ -371,7 +382,7 @@ private struct GreegLicenseView: View {
                             } else {
                                 Image(systemName: didActivate ? "checkmark.circle.fill" : "arrow.right")
                             }
-                            Text(didActivate ? "Continue" : "Enter")
+                            Text(didActivate ? "Continuar" : "Activar")
                                 .font(.headline)
                         }
                         .frame(maxWidth: .infinity)
@@ -390,12 +401,12 @@ private struct GreegLicenseView: View {
                 }
                 .padding(.horizontal, 30)
 
-                Text("Secure activation with Supabase")
+                Text("Activación segura con Supabase")
                     .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
 
                 Spacer()
-                Text("NEXUS HACK - STAY PRIVATE")
+                Text("NEXUS HACK · ACCESO PRIVADO")
                     .font(.caption2.weight(.semibold))
                     .tracking(2)
                     .foregroundStyle(.secondary)
@@ -419,7 +430,7 @@ private struct GreegLicenseView: View {
     private func validateWithSupabase() async {
         let normalized = key.normalizedLicenseKey
         guard !normalized.isEmpty else {
-            messageText = "Enter a key to continue."
+            messageText = "Introduce una key para continuar."
             return
         }
 

@@ -4,10 +4,11 @@ import UIKit
 struct ContentView: View {
     @EnvironmentObject private var patchDraftCoordinator: PatchDraftCoordinator
     @State private var tabNavigation = AppTabNavigationState()
+    let onSignOut: () -> Void
 
     var body: some View {
         TabView(selection: tabSelection) {
-            GreegHomeView {
+            GreegHomeView(onSignOut: onSignOut) {
                 withAnimation(.easeInOut(duration: 0.18)) {
                     tabNavigation.select(AppSection.archivos.rawValue)
                 }
@@ -68,7 +69,7 @@ private struct GreegHomeView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
     @EnvironmentObject private var store: PatchProjectStore
-    @State private var showsSettings = false
+    let onSignOut: () -> Void
     let onOpenFiles: () -> Void
 
     var body: some View {
@@ -96,18 +97,13 @@ private struct GreegHomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showsSettings = true
+                        onSignOut()
                     } label: {
-                        Image(systemName: "gearshape.fill")
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
                             .font(.headline.weight(.black))
                     }
-                    .accessibilityLabel("Configuración")
+                    .accessibilityLabel("Cerrar sesión")
                 }
-            }
-            .sheet(isPresented: $showsSettings) {
-                GreegSettingsSheetView()
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
             }
             .onAppear {
                 remoteContentStore.loadLocalState()
