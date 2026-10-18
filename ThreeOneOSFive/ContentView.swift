@@ -66,9 +66,21 @@ struct ContentView: View {
 
         let configuredIDs = Set(sourceTabs.map(\.id))
         let builtInAdditions = NexusAppContent.defaultTabs.filter {
-            ($0.kind == "membership" || $0.kind == "support") && !configuredIDs.contains($0.id)
+            ["files", "membership", "support"].contains($0.kind) && !configuredIDs.contains($0.id)
         }
-        let allTabs = (sourceTabs + builtInAdditions)
+        let categoryTabs = remoteContentStore.appContent.categories
+            .filter { !configuredIDs.contains($0.id) }
+            .map { category in
+                NexusAppTab(
+                    id: category.id,
+                    title: category.title,
+                    icon: category.icon,
+                    iconURL: category.iconURL,
+                    kind: "category",
+                    sortOrder: 1000 + category.sortOrder
+                )
+            }
+        let allTabs = (sourceTabs + builtInAdditions + categoryTabs)
             .filter(\.enabled)
             .sorted { $0.sortOrder < $1.sortOrder }
 
@@ -463,6 +475,12 @@ private struct NexusCategoryTabView: View {
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
     let category: NexusAppCategory
 
+    private var childCategories: [NexusAppCategory] {
+        remoteContentStore.appContent.categories
+            .filter { $0.parentID == category.id }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
     private var files: [RemoteContentFile] {
         remoteContentStore.installedFiles.filter {
             $0.category.caseInsensitiveCompare(category.id) == .orderedSame
@@ -487,6 +505,40 @@ private struct NexusCategoryTabView: View {
                     }
                     .nexusEntrance(index: 0)
 
+                    if !childCategories.isEmpty {
+                        VStack(alignment: .leading, spacing: 9) {
+                            Text("APARTADOS")
+                                .font(.caption.weight(.black))
+                                .foregroundStyle(.secondary)
+                                .tracking(1.1)
+                                .padding(.leading, 4)
+
+                            ForEach(childCategories) { child in
+                                NavigationLink {
+                                    NexusCategoryTabView(category: child)
+                                } label: {
+                                    GreegPanel {
+                                        HStack(spacing: 12) {
+                                            AppRowIcon(systemName: child.icon, tint: AppTheme.accent, symbolSize: 17, frameSize: 42)
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Text(child.title).font(.headline.weight(.bold))
+                                                Text(child.subtitle.isEmpty ? "Abrir apartado" : child.subtitle)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                    .lineLimit(2)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .foregroundStyle(AppTheme.accent)
+                                        }
+                                    }
+                                }
+                                .buttonStyle(NexusPressStyle())
+                            }
+                        }
+                        .nexusEntrance(index: 1)
+                    }
+
                     if files.isEmpty {
                         GreegPanel {
                             VStack(spacing: 10) {
@@ -503,13 +555,13 @@ private struct NexusCategoryTabView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 18)
                         }
-                        .nexusEntrance(index: 1)
+                        .nexusEntrance(index: childCategories.isEmpty ? 1 : 2)
                     } else {
                         ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
                             GreegPanel {
                                 RemoteFileMiniRow(file: file, tint: AppTheme.accent)
                             }
-                            .nexusEntrance(index: index + 1)
+                            .nexusEntrance(index: index + (childCategories.isEmpty ? 1 : 2))
                         }
                     }
                 }
