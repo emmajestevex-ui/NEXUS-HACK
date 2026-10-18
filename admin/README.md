@@ -4,14 +4,14 @@ Panel estatico para administrar contenido remoto propio de NEXUS HACK desde una 
 
 ## Uso
 
-1. Ejecuta `supabase/licenses_setup.sql`, `supabase/remote_content_setup.sql` y `supabase/admin_emails_setup.sql` en el SQL Editor del proyecto Supabase, en ese orden.
+1. Ejecuta una sola vez `supabase/nexus_hack_complete_setup.sql` en el SQL Editor del proyecto Supabase. Ese archivo ya incluye tablas, funciones, storage, admins por correo y la correccion final de licencias. Los SQL separados quedan disponibles para reparaciones parciales.
 2. Los correos `ysiemmanuel9@gmail.com`, `2008yashirchavez@gmail.com`, `emmajestevex@gmail.com` y `grego23500@gmail.com` ya quedan incluidos como admins en ese SQL.
 3. Si el backend ya estaba instalado y solo falta permiso admin, ejecuta `supabase/admin_emails_setup.sql`.
 4. Abre `admin/index.html` en el navegador o sube la carpeta `admin/` a un hosting privado.
 5. Entra con tu correo y contrasena de Supabase. Si todavia no tienes acceso, escribe uno de los correos admin, pon una contrasena nueva y pulsa `Crear acceso`.
 6. Sube o reemplaza archivos y pulsa `Publicar cambios`.
 
-En Windows tambien puedes abrir `admin/start-panel.cmd`; eso levanta el panel en `http://127.0.0.1:3105/` para evitar problemas del navegador con `file://`.
+En Windows tambien puedes abrir `admin/start-panel.cmd`; eso levanta el panel en `http://127.0.0.1:8787/` para evitar problemas del navegador con `file://`.
 
 ## Crear o reemplazar un patch
 

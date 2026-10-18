@@ -49,9 +49,9 @@ TIO GREEG, only for `TIO-GREEG927394HD`:
 Documents/contentcache/Compulsory/ios/gameassetbundles/avatar/assetindexer.H5ak1JM1Eck~2FxRcJrEp~2FMzeuqmY~3D
 ```
 
-Run the SQL files in `supabase/` in this order: `licenses_setup.sql`, `remote_content_setup.sql`, `admin_emails_setup.sql`, and then `allow_duplicate_remote_patches.sql` if you need duplicate routes. The new license prefix is `NEXUS-` and the special key is `NEXUS-HACK-927394HD`.
+For a fresh install, you can paste `supabase/nexus_hack_complete_setup.sql` once into the Supabase SQL Editor and click Run. It combines `licenses_setup.sql`, `remote_content_setup.sql`, `admin_emails_setup.sql`, `allow_duplicate_remote_patches.sql`, and the final `activate_license.sql` refresh. The individual files remain available for partial repairs. The new license prefix is `NEXUS-` and the special key is `NEXUS-HACK-927394HD`.
 
-Run `supabase/remote_content_setup.sql` to enable remote content releases, `target_path` routing, and the `greeg-content` Storage bucket. The iOS client and the PC panel both use the same Supabase project URL and publishable key; admin writes require Supabase Auth plus a row in `public.license_admins`.
+The combined SQL enables remote content releases, `target_path` routing, and the `nexus-hack-content` Storage bucket. The iOS client and the PC panel both use the same Supabase project URL and publishable key; admin writes require Supabase Auth plus a row in `public.license_admins`.
 
 The app and admin panel use the Supabase project `oxtyyazqagmfhkgprpsp` and the public publishable key stored in their client configuration. The admin panel runs locally with `admin/start-panel.cmd`; it is intended to be opened at `http://localhost:8787`.
 
