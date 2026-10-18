@@ -349,6 +349,8 @@ private struct GreegLicenseView: View {
     @State private var messageText = ""
     @State private var didActivate = false
     @State private var isLoading = false
+    @State private var revealContent = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let client = SupabaseLicenseClient()
     let onSuccess: () -> Void
 
@@ -359,74 +361,102 @@ private struct GreegLicenseView: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            VStack(spacing: 22) {
-                Spacer()
-                AppLogo(size: 104)
-                    .shadow(color: AppTheme.accent.opacity(0.55), radius: 24)
+        NexusBackground {
+            ScrollView {
+                VStack(spacing: 22) {
+                    Spacer(minLength: 44)
 
-                VStack(spacing: 7) {
-                    Text("NEXUS HACK")
-                        .font(.system(size: 31, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text("Acceso privado")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                VStack(spacing: 12) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "key.fill")
-                            .foregroundStyle(AppTheme.accent)
-                            TextField("NEXUS-ABCD-EF12-3456", text: $key)
-                            .textInputAutocapitalization(.characters)
-                            .autocorrectionDisabled()
-                            .foregroundStyle(.white)
-                            .disabled(isLoading || didActivate)
+                    ZStack {
+                        Circle()
+                            .stroke(NexusTheme.blue.opacity(0.16), lineWidth: 2)
+                        Circle()
+                            .trim(from: 0, to: revealContent ? 1 : 0)
+                            .stroke(
+                                AngularGradient(colors: [NexusTheme.blue, NexusTheme.blueBright, .white], center: .center),
+                                style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+                            .animation(NexusMotionPolicy.animation(reduceMotion: reduceMotion, normal: .easeInOut(duration: 0.8)), value: revealContent)
+                        AppLogo(size: 104)
+                            .shadow(color: NexusTheme.blue.opacity(0.38), radius: 24)
                     }
-                    .padding(.horizontal, 16)
-                    .frame(height: 54)
-                    .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 15))
-                    .overlay(RoundedRectangle(cornerRadius: 15).stroke(Color.white.opacity(0.12)))
+                    .frame(width: 132, height: 132)
+                    .nexusEntrance(index: 0)
 
-                    Button(action: primaryAction) {
-                        HStack(spacing: 10) {
-                            if isLoading {
-                                ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Image(systemName: didActivate ? "checkmark.circle.fill" : "arrow.right")
+                    VStack(spacing: 7) {
+                        Text("NEXUS HACK")
+                            .font(.system(size: 31, weight: .black, design: .rounded))
+                            .foregroundStyle(
+                                LinearGradient(colors: [.white, NexusTheme.blueBright], startPoint: .leading, endPoint: .trailing)
+                            )
+                        Text("Acceso privado")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(NexusTheme.secondaryText)
+                    }
+                    .nexusEntrance(index: 1)
+
+                    NexusCard(style: .solid) {
+                        VStack(spacing: 12) {
+                            HStack(spacing: 10) {
+                                NexusIconTile(systemName: "key.fill", tint: NexusTheme.blue, size: 38)
+                                TextField("NEXUS-ABCD-EF12-3456", text: $key)
+                                    .textInputAutocapitalization(.characters)
+                                    .autocorrectionDisabled()
+                                    .foregroundStyle(.white)
+                                    .disabled(isLoading || didActivate)
                             }
-                            Text(didActivate ? "Continuar" : "Activar")
-                                .font(.headline)
+
+                            Button(action: primaryAction) {
+                                HStack(spacing: 10) {
+                                    if isLoading {
+                                        ProgressView().tint(.white)
+                                    } else {
+                                        Image(systemName: didActivate ? "checkmark.circle.fill" : "arrow.right")
+                                    }
+                                    Text(didActivate ? "Continuar" : "Activar key")
+                                        .font(.headline.weight(.bold))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 52)
+                                .background(NexusTheme.blue, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .foregroundStyle(.white)
+                            }
+                            .buttonStyle(NexusPressStyle())
+                            .disabled(isLoading)
+
+                            if !messageText.isEmpty {
+                                Text(messageText)
+                                    .font(.footnote)
+                                    .foregroundStyle(messageText.lowercased().contains("error") ? NexusTheme.danger : NexusTheme.blueBright)
+                                    .multilineTextAlignment(.center)
+                            }
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 15))
-                        .foregroundStyle(.white)
                     }
-                    .disabled(isLoading)
+                    .nexusEntrance(index: 2)
 
-                    if !messageText.isEmpty {
-                        Text(messageText)
-                            .font(.footnote)
-                            .foregroundStyle(AppTheme.accent)
-                            .multilineTextAlignment(.center)
-                    }
+                    Text("Activación segura con Supabase")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(NexusTheme.tertiaryText)
+                        .nexusEntrance(index: 3)
+
+                    Text("NEXUS HACK · ACCESO PRIVADO")
+                        .font(.caption2.weight(.semibold))
+                        .tracking(2)
+                        .foregroundStyle(NexusTheme.tertiaryText)
+                        .padding(.top, 24)
+                        .padding(.bottom, 18)
                 }
-                .padding(.horizontal, 30)
-
-                Text("Activación segura con Supabase")
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-                Text("NEXUS HACK · ACCESO PRIVADO")
-                    .font(.caption2.weight(.semibold))
-                    .tracking(2)
-                    .foregroundStyle(.secondary)
-                    .padding(.bottom, 24)
+                .padding(.horizontal, 20)
+            }
+        }
+        .scrollIndicators(.hidden)
+        .onAppear {
+            if reduceMotion {
+                revealContent = true
+            } else {
+                withAnimation(.easeInOut(duration: 0.8).delay(0.15)) {
+                    revealContent = true
+                }
             }
         }
     }
