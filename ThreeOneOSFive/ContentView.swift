@@ -96,6 +96,7 @@ private struct NexusMembershipView: View {
     @AppStorage("greeg.license.supabaseUnlocked") private var isUnlocked = false
     @State private var showingDeactivateConfirmation = false
     @State private var showingLicenseSheet = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onSignOut: () -> Void
     let onLicenseActivated: () -> Void
 
@@ -131,7 +132,7 @@ private struct NexusMembershipView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(isUnlocked ? "Membresía activa" : "Sin membresía")
                                         .font(.title3.weight(.black))
-                                    Text(isUnlocked ? "Acceso verificado a NEXUS HACK" : "Activa tu key para continuar")
+                                    Text(isUnlocked ? "Acceso verificado a NEXUS HACK" : "Activa tu key para desbloquear funciones privadas")
                                         .font(.subheadline)
                                         .foregroundStyle(NexusTheme.secondaryText)
                                 }
@@ -160,6 +161,10 @@ private struct NexusMembershipView: View {
                         }
                     }
                     .nexusEntrance(index: 0)
+                    .animation(
+                        NexusMotionPolicy.animation(reduceMotion: reduceMotion, normal: .spring(response: 0.38, dampingFraction: 0.82)),
+                        value: isUnlocked
+                    )
 
                     if !isUnlocked {
                         NexusCard {
@@ -179,6 +184,11 @@ private struct NexusMembershipView: View {
                         }
                         .contentShape(Rectangle())
                         .onTapGesture { showingLicenseSheet = true }
+                        .transition(
+                            NexusMotionPolicy.animation(reduceMotion: reduceMotion, normal: .spring(response: 0.38, dampingFraction: 0.82)) == nil
+                                ? .opacity
+                                : .move(edge: .bottom).combined(with: .opacity)
+                        )
                         .nexusEntrance(index: 1)
                     }
                 }
@@ -191,13 +201,21 @@ private struct NexusMembershipView: View {
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showingLicenseSheet) {
                 GreegLicenseView {
-                    onLicenseActivated()
-                    showingLicenseSheet = false
+                    NexusHaptics.notification(.success)
+                    withAnimation(NexusMotionPolicy.animation(reduceMotion: reduceMotion, normal: .spring(response: 0.42, dampingFraction: 0.84))) {
+                        onLicenseActivated()
+                        showingLicenseSheet = false
+                    }
                 }
             }
             .alert("Desactivar key", isPresented: $showingDeactivateConfirmation) {
                 Button("Cancelar", role: .cancel) {}
-                Button("Desactivar", role: .destructive) { onSignOut() }
+                Button("Desactivar", role: .destructive) {
+                    NexusHaptics.notification(.warning)
+                    withAnimation(NexusMotionPolicy.animation(reduceMotion: reduceMotion, normal: .easeInOut(duration: 0.24))) {
+                        onSignOut()
+                    }
+                }
             } message: {
                 Text("Se eliminará la key guardada en este dispositivo y tendrás que activarla de nuevo.")
             }
