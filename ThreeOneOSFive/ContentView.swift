@@ -624,11 +624,10 @@ private struct GreegHomeView: View {
                     if let announcement = remoteContentStore.appContent.announcement {
                         announcementCard(announcement).nexusEntrance(index: 1)
                     }
-                    remoteCategoriesCard.nexusEntrance(index: 2)
-                    sectionTitle("ARCHIVOS PRINCIPALES").nexusEntrance(index: 3)
+                    accessOverviewCard.nexusEntrance(index: 2)
+                    remoteCategoriesCard.nexusEntrance(index: 3)
                     mainFilesCard.nexusEntrance(index: 4)
-                    sectionTitle("ACTUALIZACIONES").nexusEntrance(index: 5)
-                    updatesCard.nexusEntrance(index: 6)
+                    updatesCard.nexusEntrance(index: 5)
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 10)
@@ -722,18 +721,25 @@ private struct GreegHomeView: View {
     private var mainFilesCard: some View {
         GreegPanel {
             VStack(spacing: 9) {
-                Button(action: onOpenFiles) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "arrow.right.circle.fill")
+                HStack(spacing: 10) {
+                    NexusIconTile(systemName: isUnlocked ? "square.grid.2x2.fill" : "lock.fill", tint: AppTheme.accent, size: 38)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Biblioteca privada")
                             .font(.headline.weight(.black))
-                        Text("Abrir archivos")
-                            .font(.subheadline.weight(.black))
-                        Spacer()
+                        Text(isUnlocked ? "Tus apartados y patches" : "Disponible después de activar")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .foregroundStyle(AppTheme.accent)
+                    Spacer()
+                    Button(action: isUnlocked ? onOpenFiles : onOpenMembership) {
+                        Image(systemName: isUnlocked ? "arrow.up.right" : "key.fill")
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(AppTheme.accent)
+                            .frame(width: 38, height: 38)
+                            .background(AppTheme.accent.opacity(0.12), in: Circle())
+                    }
+                    .buttonStyle(NexusPressStyle())
                 }
-                .buttonStyle(.plain)
-                .buttonStyle(NexusPressStyle())
 
                 Divider().overlay(Color.white.opacity(0.08))
 
@@ -752,6 +758,28 @@ private struct GreegHomeView: View {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    private var accessOverviewCard: some View {
+        GreegPanel {
+            HStack(spacing: 0) {
+                HomeOverviewMetric(
+                    icon: isUnlocked ? "checkmark.seal.fill" : "lock.fill",
+                    title: "Membresía",
+                    value: isUnlocked ? "Activa" : "Pendiente",
+                    tint: isUnlocked ? NexusTheme.success : NexusTheme.blueBright
+                )
+                Rectangle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 1, height: 42)
+                HomeOverviewMetric(
+                    icon: isUnlocked ? "shippingbox.fill" : "lock.shield.fill",
+                    title: "Biblioteca",
+                    value: isUnlocked ? "Disponible" : "Protegida",
+                    tint: isUnlocked ? AppTheme.accent : NexusTheme.secondaryText
+                )
             }
         }
     }
@@ -779,7 +807,7 @@ private struct GreegHomeView: View {
                         frameSize: 38
                     )
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(remoteContentStore.installedFiles.isEmpty ? "Sincronizar" : "Actualizado")
+                        Text(remoteContentStore.installedFiles.isEmpty ? "Centro de sincronización" : "Contenido actualizado")
                             .font(.headline.weight(.black))
                         Text(isUnlocked ? remoteContentStore.detailText : "Activa tu key desde Membresía para sincronizar contenido privado.")
                             .font(.subheadline)
@@ -883,7 +911,11 @@ private struct GreegHomeView: View {
                 }
             } else if !categories.isEmpty {
                 VStack(alignment: .leading, spacing: 9) {
-                    sectionTitle("CATEGORÍAS")
+                    Text("SECCIONES ACTIVAS")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(.secondary)
+                        .tracking(1.2)
+                        .padding(.leading, 4)
                     ForEach(categories) { category in
                         let files = remoteContentStore.installedFiles.filter { file in
                             file.category.caseInsensitiveCompare(category.id) == .orderedSame
@@ -2043,6 +2075,33 @@ private struct HomePatchRow: View {
                 .font(.subheadline.weight(.bold))
                 .foregroundColor(.green)
         }
+    }
+}
+
+private struct HomeOverviewMetric: View {
+    let icon: String
+    let title: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.subheadline.weight(.black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
