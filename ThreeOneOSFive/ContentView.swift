@@ -140,7 +140,7 @@ private struct GreegHomeView: View {
 
                     Label(appState.isSupported ? "Listo" : "Revisar", systemImage: appState.isSupported ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                         .font(.caption.weight(.black))
-                        .foregroundColor(appState.isSupported ? .green : AppTheme.accent)
+                        .foregroundColor(AppTheme.accent)
                         .labelStyle(.titleAndIcon)
                 }
 
@@ -728,9 +728,9 @@ private enum GreegPatchStyle: String, Hashable {
         case .antena:
             return AppTheme.accent
         case .holo:
-            return Color(red: 0.19, green: 0.84, blue: 0.38)
+            return Color.secondary
         case .aimbotNormal:
-            return Color(red: 1.0, green: 0.78, blue: 0.16)
+            return AppTheme.accent.opacity(0.76)
         case .category:
             return AppTheme.accent
         }

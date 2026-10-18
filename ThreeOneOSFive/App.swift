@@ -384,7 +384,7 @@ private struct GreegLicenseView: View {
                     if !messageText.isEmpty {
                         Text(messageText)
                             .font(.footnote)
-                            .foregroundStyle(didActivate ? .green : AppTheme.accent)
+                            .foregroundStyle(AppTheme.accent)
                             .multilineTextAlignment(.center)
                     }
                 }
