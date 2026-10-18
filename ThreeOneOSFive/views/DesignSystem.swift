@@ -4,11 +4,15 @@ enum AppTheme {
     static let accent = Color(
         uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 1.00, green: 0.08, blue: 0.10, alpha: 1.00)
-                : UIColor(red: 0.88, green: 0.02, blue: 0.08, alpha: 1.00)
+                ? UIColor(red: 0.20, green: 0.58, blue: 0.95, alpha: 1.00)
+                : UIColor(red: 0.08, green: 0.33, blue: 0.68, alpha: 1.00)
         }
     )
-    static let pageBackground = Color(uiColor: .systemBackground)
+    static let pageBackground = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.035, green: 0.047, blue: 0.065, alpha: 1)
+            : UIColor(red: 0.96, green: 0.975, blue: 0.995, alpha: 1)
+    })
     static let consoleBackground = Color(uiColor: .secondarySystemBackground)
     static let pageInset: CGFloat = 16
     static let rowIconSize: CGFloat = 17

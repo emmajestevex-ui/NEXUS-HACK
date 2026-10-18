@@ -172,6 +172,7 @@ const els = {
   assetVariantInput: $("#assetVariantInput"),
   targetPathInput: $("#targetPathInput"),
   descriptionInput: $("#descriptionInput"),
+  thumbnailInput: $("#thumbnailInput"),
   fileInput: $("#fileInput"),
   saveButton: $("#saveButton"),
   newButton: $("#newButton"),
@@ -203,6 +204,10 @@ const els = {
   generatedKeysBlock: $("#generatedKeysBlock"),
   generatedKeysOutput: $("#generatedKeysOutput"),
   copyGeneratedKeysButton: $("#copyGeneratedKeysButton"),
+  loadSettingsButton: $("#loadSettingsButton"),
+  saveSettingsButton: $("#saveSettingsButton"),
+  settingsInput: $("#settingsInput"),
+  settingsStatusText: $("#settingsStatusText"),
 };
 
 init();
@@ -247,6 +252,8 @@ function bindEvents() {
   els.keySearchInput.addEventListener("input", renderKeys);
   els.keyForm.addEventListener("submit", createKeys);
   els.copyGeneratedKeysButton.addEventListener("click", copyGeneratedKeys);
+  els.loadSettingsButton.addEventListener("click", loadSettings);
+  els.saveSettingsButton.addEventListener("click", saveSettings);
   els.keyDurationUnitInput.addEventListener("change", syncDurationInput);
   els.customKeyInput.addEventListener("input", syncCustomKeyQuantity);
   els.nameInput.addEventListener("input", () => {
@@ -405,6 +412,7 @@ function setSession(session) {
     setLoginStatus("Sesion iniciada.", false, true);
     loadFiles();
     loadKeys();
+    loadSettings();
   } else {
     state.files = [];
     state.licenses = [];
@@ -446,6 +454,56 @@ async function loadKeys() {
   state.licenses = data ?? [];
   els.keysStatusText.textContent = "Keys cargadas. La activacion se valida en Supabase.";
   renderKeys();
+}
+
+const DEFAULT_APP_CONTENT = {
+  title: "NEXUS HACK",
+  subtitle: "Control privado",
+  announcement: { title: "Centro NEXUS", body: "Sincroniza para recibir las novedades.", icon: "sparkles", color: "blue" },
+  categories: [
+    { id: "aim", title: "AIM", subtitle: "Parches principales", icon: "scope", color: "blue", parent_id: null, sort_order: 0 },
+    { id: "tutoriales", title: "Tutoriales", subtitle: "Guías y anuncios", icon: "book.fill", color: "gray", parent_id: null, sort_order: 1 }
+  ],
+  socials: [
+    { title: "Discord", subtitle: "Comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
+    { title: "TikTok", subtitle: "@tumbado_sensi7", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black" }
+  ]
+};
+
+async function loadSettings() {
+  if (!state.session) return;
+  els.settingsStatusText.textContent = "Cargando diseno remoto...";
+  const { data, error } = await supabaseClient.rpc("admin_get_app_settings");
+  if (error) {
+    els.settingsStatusText.textContent = adminErrorMessage(error);
+    return;
+  }
+  els.settingsInput.value = JSON.stringify(data || DEFAULT_APP_CONTENT, null, 2);
+  els.settingsStatusText.textContent = "Diseno cargado. Puedes editar categorias, subcategorias, anuncios y redes.";
+}
+
+async function saveSettings() {
+  if (!state.session || state.busy) return;
+  let content;
+  try {
+    content = JSON.parse(els.settingsInput.value);
+  } catch {
+    els.settingsStatusText.textContent = "El JSON no es valido.";
+    return;
+  }
+  if (!content || typeof content !== "object" || !Array.isArray(content.categories) || !Array.isArray(content.socials)) {
+    els.settingsStatusText.textContent = "Incluye categories y socials como listas JSON.";
+    return;
+  }
+  setBusy(true, "Guardando diseno remoto...");
+  const { error } = await supabaseClient.rpc("admin_update_app_settings", { p_content: content });
+  setBusy(false);
+  if (error) {
+    els.settingsStatusText.textContent = adminErrorMessage(error);
+    return;
+  }
+  els.settingsInput.value = JSON.stringify(content, null, 2);
+  els.settingsStatusText.textContent = "Diseno guardado. Pulsa Publicar cambios para enviarlo a los iPhone.";
 }
 
 async function createKeys(event) {
@@ -564,6 +622,20 @@ async function saveFile(event) {
     if (uploadError) throw uploadError;
     uploadedPath = storagePath;
 
+    let thumbnailPath = thumbnailMarkerFromDescription(els.descriptionInput.value);
+    const thumbnail = els.thumbnailInput.files?.[0];
+    if (thumbnail) {
+      thumbnailPath = `content/thumbnails/${crypto.randomUUID()}.${safeStorageFileName(thumbnail.name).split(".").pop() || "jpg"}`;
+      const { error: thumbnailError } = await supabaseClient.storage
+        .from(BUCKET)
+        .upload(thumbnailPath, thumbnail, {
+          cacheControl: "3600",
+          contentType: thumbnail.type || "image/jpeg",
+          upsert: true,
+        });
+      if (thumbnailError) throw thumbnailError;
+    }
+
     setStatus("Guardando metadata...");
     const isReplacing = Boolean(els.editingId.value);
     const { error: rpcError } = await supabaseClient.rpc("admin_upsert_remote_content_file", {
@@ -573,7 +645,7 @@ async function saveFile(event) {
       p_category: categoryForStyle(els.styleInput.value, els.categoryInput.value),
       p_target_bundle: targetBundle,
       p_target_path: targetPath,
-      p_description: withStyleMarker(els.descriptionInput.value, els.styleInput.value),
+      p_description: withStyleMarker(withThumbnailMarker(els.descriptionInput.value, thumbnailPath), els.styleInput.value),
       p_file_name: file.name,
       p_mime_type: file.type || "application/octet-stream",
       p_byte_size: file.size,
@@ -1076,7 +1148,18 @@ function cleanDescription(description = "") {
   return String(description || "")
     .replace(STYLE_MARKER_PATTERN, "")
     .replace(/\s*\[GREEG_CATEGORY:(aimbots|shaders)\]\s*/i, "")
+    .replace(/\s*\[NEXUS_IMAGE:[^\]]+\]\s*/i, "")
     .trim();
+}
+
+function thumbnailMarkerFromDescription(description = "") {
+  const match = String(description || "").match(/\[NEXUS_IMAGE:([^\]]+)\]/i);
+  return match?.[1]?.trim() || "";
+}
+
+function withThumbnailMarker(description = "", thumbnailPath = "") {
+  const clean = cleanDescription(description);
+  return thumbnailPath ? `${clean} [NEXUS_IMAGE:${thumbnailPath}]`.trim() : clean;
 }
 
 function withStyleMarker(description = "", style = "antena") {

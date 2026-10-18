@@ -118,6 +118,11 @@
               <textarea id="descriptionInput" rows="3" placeholder="Nota interna opcional"></textarea>
             </label>
             <label>
+              Imagen pequena del patch (opcional)
+              <input id="thumbnailInput" type="file" accept="image/png,image/jpeg,image/webp" />
+              <span class="fieldHint">Se muestra junto al nombre y llega con la sincronizacion.</span>
+            </label>
+            <label>
               Archivo nuevo o reemplazo
               <input id="fileInput" type="file" required />
             </label>
@@ -152,6 +157,21 @@
             <p class="muted archiveHint">Estos registros no forman parte del manifest vigente que recibe la app.</p>
             <div id="archivedFileList" class="fileList"></div>
           </div>
+        </section>
+
+        <section class="panel fullWidth">
+          <div class="panelHeader">
+            <div>
+              <h2>Diseno remoto</h2>
+              <p class="muted">Edita categorias, subcategorias, anuncios y redes sin cambiar la IPA.</p>
+            </div>
+            <div class="actions">
+              <button id="loadSettingsButton" class="ghost" type="button">Cargar diseno</button>
+              <button id="saveSettingsButton" class="primary" type="button">Guardar diseno</button>
+            </div>
+          </div>
+          <p id="settingsStatusText" class="notice">Usa el JSON de ejemplo para agregar categorias y redes. Despues pulsa Publicar cambios.</p>
+          <textarea id="settingsInput" class="settingsEditor" rows="18" spellcheck="false"></textarea>
         </section>
 
         <section class="panel fullWidth">

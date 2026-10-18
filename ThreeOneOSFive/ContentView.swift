@@ -76,18 +76,22 @@ private struct GreegHomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     heroCard
+                    if let announcement = remoteContentStore.appContent.announcement {
+                        announcementCard(announcement)
+                    }
+                    remoteCategoriesCard
                     sectionTitle("ARCHIVOS PRINCIPALES")
                     mainFilesCard
-                    sectionTitle("ACTUALIZACIONES")
-                    updatesCard
                     sectionTitle("REDES")
                     compactSocialCard
+                    sectionTitle("ACTUALIZACIONES")
+                    updatesCard
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 10)
                 .padding(.bottom, 36)
             }
-            .background(Color.black.ignoresSafeArea())
+            .background(AppTheme.pageBackground.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -249,9 +253,83 @@ private struct GreegHomeView: View {
 
     private var compactSocialCard: some View {
         GreegPanel {
-            Link(destination: GreegSocialLink.tiktok.url) {
-                SocialRow(link: .tiktok)
+            VStack(spacing: 8) {
+                ForEach(displaySocials) { social in
+                    if let url = URL(string: social.url) {
+                        Link(destination: url) {
+                            RemoteSocialRow(social: social)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
+        }
+    }
+
+    private var displaySocials: [NexusAppSocial] {
+        if !remoteContentStore.appContent.socials.isEmpty { return remoteContentStore.appContent.socials }
+        return [
+            NexusAppSocial(title: "Discord", subtitle: "Comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue"),
+            NexusAppSocial(title: "TikTok", subtitle: "@tumbado_sensi7", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black")
+        ]
+    }
+
+    private func announcementCard(_ announcement: NexusAppAnnouncement) -> some View {
+        GreegPanel {
+            HStack(alignment: .top, spacing: 12) {
+                AppRowIcon(systemName: announcement.icon, tint: themeColor(announcement.color), symbolSize: 17, frameSize: 42)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(announcement.title).font(.headline.weight(.bold))
+                    Text(announcement.body).font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var remoteCategoriesCard: some View {
+        let categories = remoteContentStore.appContent.categories.sorted { $0.sortOrder < $1.sortOrder }
+        return Group {
+            if !categories.isEmpty {
+                VStack(alignment: .leading, spacing: 9) {
+                    sectionTitle("CATEGORÍAS")
+                    ForEach(categories) { category in
+                        let files = remoteContentStore.installedFiles.filter { file in
+                            file.category.caseInsensitiveCompare(category.id) == .orderedSame
+                                || file.category.caseInsensitiveCompare(category.title) == .orderedSame
+                        }
+                        GreegPanel {
+                            HStack(spacing: 12) {
+                                AppRowIcon(systemName: category.icon, tint: themeColor(category.color), symbolSize: 17, frameSize: 42)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(category.title).font(.headline.weight(.bold))
+                                    Text(category.subtitle.isEmpty ? "Contenido actualizado por sincronización" : category.subtitle)
+                                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                }
+                                Spacer()
+                                Text("\(files.count)")
+                                    .font(.headline.weight(.black))
+                                    .foregroundStyle(themeColor(category.color))
+                            }
+                            if !files.isEmpty {
+                                Divider().padding(.vertical, 2)
+                                ForEach(files.prefix(4)) { file in
+                                    RemoteFileMiniRow(file: file, tint: themeColor(category.color))
+                                }
+                            }
+                        }
+                        .padding(.leading, category.parentID == nil ? 0 : 16)
+                    }
+                }
+            }
+        }
+    }
+
+    private func themeColor(_ value: String) -> Color {
+        switch value.lowercased() {
+        case "black": return Color.primary
+        case "gray", "grey": return Color.secondary
+        default: return AppTheme.accent
         }
     }
 
@@ -261,6 +339,89 @@ private struct GreegHomeView: View {
             .foregroundStyle(.secondary)
             .tracking(1.2)
             .padding(.leading, 4)
+    }
+}
+
+private struct RemoteSocialRow: View {
+    let social: NexusAppSocial
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AppRowIcon(systemName: social.icon, tint: social.color.lowercased() == "black" ? .primary : AppTheme.accent, symbolSize: 17, frameSize: 42)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(social.title).font(.headline.weight(.bold))
+                Text(social.subtitle).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "arrow.up.right")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(AppTheme.accent)
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+private struct RemoteFileMiniRow: View {
+    let file: RemoteContentFile
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 10) {
+            RemoteFileArtwork(file: file, tint: tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(file.name).font(.subheadline.weight(.bold)).lineLimit(1)
+                Text(file.description?.nexusCleanDescription ?? "Disponible después de sincronizar")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(tint)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct RemoteFileArtwork: View {
+    let file: RemoteContentFile
+    let tint: Color
+
+    var body: some View {
+        Group {
+            if let url = file.nexusThumbnailURL {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { fallback }
+                }
+            } else { fallback }
+        }
+        .frame(width: 38, height: 38)
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var fallback: some View {
+        Image(systemName: "shippingbox.fill")
+            .font(.system(size: 16, weight: .bold))
+            .foregroundStyle(tint)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private extension String {
+    var nexusCleanDescription: String {
+        replacingOccurrences(of: #"\s*\[GREEG_STYLE:[^\]]+\]"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s*\[GREEG_CATEGORY:[^\]]+\]"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s*\[NEXUS_IMAGE:[^\]]+\]"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private extension RemoteContentFile {
+    var nexusThumbnailURL: URL? {
+        guard let description,
+              let match = description.range(of: #"\[NEXUS_IMAGE:([^\]]+)\]"#, options: .regularExpression) else { return nil }
+        let token = String(description[match]).replacingOccurrences(of: "[NEXUS_IMAGE:", with: "").dropLast()
+        guard !token.isEmpty else { return nil }
+        return URL(string: "\(SupabaseLicenseConfig.projectURL.absoluteString)/storage/v1/object/public/nexus-hack-content/\(token.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? token)")
     }
 }
 
@@ -347,7 +508,7 @@ private struct GreegPatchLibraryView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 36)
             }
-            .background(Color.black.ignoresSafeArea())
+            .background(AppTheme.pageBackground.ignoresSafeArea())
             .navigationTitle("Archivos")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear(perform: reloadPrivatePatches)
@@ -696,7 +857,7 @@ private struct GreegPatchDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 36)
         }
-        .background(Color.black.ignoresSafeArea())
+        .background(AppTheme.pageBackground.ignoresSafeArea())
         .navigationTitle(project?.name ?? "Archivo")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -903,7 +1064,7 @@ private struct GreegInstallationView: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 36)
             }
-            .background(Color.black.ignoresSafeArea())
+            .background(AppTheme.pageBackground.ignoresSafeArea())
             .navigationTitle("Instalación")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -975,7 +1136,7 @@ private struct GreegSettingsSheetView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 36)
             }
-            .background(Color.black.ignoresSafeArea())
+            .background(AppTheme.pageBackground.ignoresSafeArea())
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1072,7 +1233,7 @@ private struct GreegSocialView: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 36)
             }
-            .background(Color.black.ignoresSafeArea())
+            .background(AppTheme.pageBackground.ignoresSafeArea())
             .navigationTitle("Redes")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -1083,10 +1244,10 @@ private enum GreegSocialLink {
     case tiktok
 
     var title: String { "TikTok" }
-    var subtitle: String { "@gregg_top" }
-    var systemImage: String { "play.rectangle.fill" }
+    var subtitle: String { "@tumbado_sensi7" }
+    var systemImage: String { "music.note" }
     var url: URL {
-        URL(string: "https://www.tiktok.com/@gregg_top?is_from_webapp=1&sender_device=pc")!
+        URL(string: "https://www.tiktok.com/@tumbado_sensi7")!
     }
 }
 
@@ -1121,7 +1282,11 @@ private struct GreegPanel<Content: View>: View {
             .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    .fill(Color(red: 0.09, green: 0.085, blue: 0.095))
+                    .fill(Color(uiColor: UIColor { traits in
+                        traits.userInterfaceStyle == .dark
+                            ? UIColor(red: 0.075, green: 0.105, blue: 0.15, alpha: 1)
+                            : UIColor.white
+                    }))
                     .overlay(
                         RoundedRectangle(cornerRadius: 17, style: .continuous)
                             .stroke(AppTheme.accent.opacity(0.28), lineWidth: 1)

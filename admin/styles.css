@@ -1,14 +1,14 @@
 :root {
   color-scheme: dark;
-  --bg: #0b0d10;
-  --panel: #15191f;
-  --panel-strong: #1d232b;
-  --line: #2b333d;
+  --bg: #08111f;
+  --panel: #101d2d;
+  --panel-strong: #172a40;
+  --line: #29415d;
   --text: #f4f7fb;
   --muted: #95a0ad;
-  --accent: #f01821;
-  --accent-strong: #ff4249;
-  --blue: #3fa7ff;
+  --accent: #2f8fff;
+  --accent-strong: #69b2ff;
+  --blue: #2f8fff;
   --green: #4bd47b;
   --warning: #f5b84b;
 }
@@ -148,6 +148,18 @@ h3 {
 .form {
   display: grid;
   gap: 14px;
+}
+
+.settingsEditor {
+  width: 100%;
+  min-height: 320px;
+  resize: vertical;
+  padding: 14px;
+  color: #dcecff;
+  background: #091523;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .quickPanel {
@@ -460,18 +472,18 @@ textarea:focus {
 }
 
 .styleAntena {
-  color: #ff4d57;
-  background: rgba(240, 24, 33, 0.14);
+  color: #69b2ff;
+  background: rgba(47, 143, 255, 0.14);
 }
 
 .styleHolo {
-  color: #43e06b;
-  background: rgba(67, 224, 107, 0.14);
+  color: #c4d5e8;
+  background: rgba(196, 213, 232, 0.14);
 }
 
 .styleAimbot {
-  color: #ffd45a;
-  background: rgba(255, 212, 90, 0.16);
+  color: #f4f7fb;
+  background: rgba(244, 247, 251, 0.12);
 }
 
 .fileActions {

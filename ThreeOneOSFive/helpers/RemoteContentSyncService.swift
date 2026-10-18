@@ -175,12 +175,98 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
     }
 }
 
+struct NexusAppAnnouncement: Codable, Equatable {
+    let title: String
+    let body: String
+    let icon: String
+    let color: String
+}
+
+struct NexusAppCategory: Codable, Identifiable, Equatable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let icon: String
+    let color: String
+    let parentID: String?
+    let sortOrder: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, subtitle, icon, color
+        case parentID = "parent_id"
+        case sortOrder = "sort_order"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        title = (try? c.decode(String.self, forKey: .title)) ?? "Categoria"
+        subtitle = (try? c.decode(String.self, forKey: .subtitle)) ?? ""
+        icon = (try? c.decode(String.self, forKey: .icon)) ?? "square.grid.2x2.fill"
+        color = (try? c.decode(String.self, forKey: .color)) ?? "blue"
+        parentID = try? c.decodeIfPresent(String.self, forKey: .parentID)
+        sortOrder = (try? c.decode(Int.self, forKey: .sortOrder)) ?? 0
+    }
+}
+
+struct NexusAppSocial: Codable, Identifiable, Equatable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let url: String
+    let icon: String
+    let color: String
+
+    enum CodingKeys: String, CodingKey { case id, title, subtitle, url, icon, color }
+
+    init(title: String, subtitle: String, url: String, icon: String, color: String) {
+        self.id = title.lowercased().replacingOccurrences(of: " ", with: "-")
+        self.title = title; self.subtitle = subtitle; self.url = url; self.icon = icon; self.color = color
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        title = (try? c.decode(String.self, forKey: .title)) ?? "Red social"
+        id = (try? c.decode(String.self, forKey: .id)) ?? title.lowercased()
+        subtitle = (try? c.decode(String.self, forKey: .subtitle)) ?? ""
+        url = (try? c.decode(String.self, forKey: .url)) ?? ""
+        icon = (try? c.decode(String.self, forKey: .icon)) ?? "link"
+        color = (try? c.decode(String.self, forKey: .color)) ?? "blue"
+    }
+}
+
+struct NexusAppContent: Codable, Equatable {
+    let title: String
+    let subtitle: String
+    let announcement: NexusAppAnnouncement?
+    let categories: [NexusAppCategory]
+    let socials: [NexusAppSocial]
+
+    static let empty = NexusAppContent(title: "NEXUS HACK", subtitle: "Control privado", announcement: nil, categories: [], socials: [])
+
+    init(title: String, subtitle: String, announcement: NexusAppAnnouncement?, categories: [NexusAppCategory], socials: [NexusAppSocial]) {
+        self.title = title; self.subtitle = subtitle; self.announcement = announcement; self.categories = categories; self.socials = socials
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        title = (try? c.decode(String.self, forKey: .title)) ?? "NEXUS HACK"
+        subtitle = (try? c.decode(String.self, forKey: .subtitle)) ?? "Control privado"
+        announcement = try? c.decodeIfPresent(NexusAppAnnouncement.self, forKey: .announcement)
+        categories = (try? c.decode([NexusAppCategory].self, forKey: .categories)) ?? []
+        socials = (try? c.decode([NexusAppSocial].self, forKey: .socials)) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey { case title, subtitle, announcement, categories, socials }
+}
+
 struct RemoteContentManifest: Codable, Equatable {
     let success: Bool
     let message: String
     let version: Int
     let publishedAt: String?
     let files: [RemoteContentFile]
+    let appContent: NexusAppContent
 
     enum CodingKeys: String, CodingKey {
         case success
@@ -188,6 +274,7 @@ struct RemoteContentManifest: Codable, Equatable {
         case version
         case publishedAt = "published_at"
         case files
+        case appContent = "app_content"
     }
 
     init(
@@ -195,13 +282,15 @@ struct RemoteContentManifest: Codable, Equatable {
         message: String = "",
         version: Int = 0,
         publishedAt: String? = nil,
-        files: [RemoteContentFile] = []
+        files: [RemoteContentFile] = [],
+        appContent: NexusAppContent = .empty
     ) {
         self.success = success
         self.message = message
         self.version = version
         self.publishedAt = publishedAt
         self.files = files
+        self.appContent = appContent
     }
 
     init(from decoder: Decoder) throws {
@@ -211,6 +300,7 @@ struct RemoteContentManifest: Codable, Equatable {
         version = (try? container.decode(Int.self, forKey: .version)) ?? 0
         publishedAt = try? container.decodeIfPresent(String.self, forKey: .publishedAt)
         files = (try? container.decode([RemoteContentFile].self, forKey: .files)) ?? []
+        appContent = (try? container.decode(NexusAppContent.self, forKey: .appContent)) ?? .empty
     }
 }
 
@@ -246,6 +336,7 @@ enum RemoteContentSyncError: LocalizedError {
 @MainActor
 final class RemoteContentStore: ObservableObject {
     @Published private(set) var installedFiles: [RemoteContentFile] = []
+    @Published private(set) var appContent: NexusAppContent = .empty
     @Published private(set) var remoteVersion = 0
     @Published private(set) var statusText = "Ready"
     @Published private(set) var detailText = "Remote content is stored inside NEXUS HACK."
@@ -268,10 +359,12 @@ final class RemoteContentStore: ObservableObject {
     func loadLocalState() {
         guard let manifest = try? loadLocalManifest() else {
             installedFiles = []
+            appContent = .empty
             remoteVersion = 0
             return
         }
         installedFiles = manifest.files.filter(\.isAvailable)
+        appContent = manifest.appContent
         remoteVersion = manifest.version
     }
 
@@ -303,6 +396,7 @@ final class RemoteContentStore: ObservableObject {
                 try saveLocalManifest(manifest)
                 BundledPatchSeeder.seedIfNeeded()
                 installedFiles = manifest.files.filter(\.isAvailable)
+                appContent = manifest.appContent
                 remoteVersion = manifest.version
                 progress = 1
                 statusText = "Up to date"
@@ -347,6 +441,7 @@ final class RemoteContentStore: ObservableObject {
             try saveLocalManifest(manifest)
             BundledPatchSeeder.seedIfNeeded()
             installedFiles = manifest.files.filter(\.isAvailable)
+            appContent = manifest.appContent
             remoteVersion = manifest.version
             progress = 1
             statusText = "Content updated"

@@ -10,6 +10,8 @@ Panel estatico para administrar contenido remoto propio de NEXUS HACK desde una 
 4. Abre `admin/index.html` en el navegador o sube la carpeta `admin/` a un hosting privado.
 5. Entra con tu correo y contrasena de Supabase. Si todavia no tienes acceso, escribe uno de los correos admin, pon una contrasena nueva y pulsa `Crear acceso`.
 6. Sube o reemplaza archivos y pulsa `Publicar cambios`.
+7. En `Diseno remoto` edita el JSON para agregar categorias o subcategorias (`parent_id`), anuncios, iconos, colores `blue`, `gray` o `black`, y redes. Guarda el diseno y despues pulsa `Publicar cambios`; la app lo recibe al sincronizar sin una IPA nueva.
+8. Al crear un patch puedes adjuntar una imagen pequena. El panel la guarda en Storage y la app la muestra junto al nombre.
 
 En Windows tambien puedes abrir `admin/start-panel.cmd`; eso levanta el panel en `http://127.0.0.1:8787/` para evitar problemas del navegador con `file://`.
 

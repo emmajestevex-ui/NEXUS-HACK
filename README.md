@@ -51,7 +51,7 @@ Documents/contentcache/Compulsory/ios/gameassetbundles/avatar/assetindexer.H5ak1
 
 For a fresh install, you can paste `supabase/nexus_hack_complete_setup.sql` once into the Supabase SQL Editor and click Run. It combines `licenses_setup.sql`, `remote_content_setup.sql`, `admin_emails_setup.sql`, `allow_duplicate_remote_patches.sql`, and the final `activate_license.sql` refresh. The individual files remain available for partial repairs. The new license prefix is `NEXUS-` and the special key is `NEXUS-HACK-927394HD`.
 
-The combined SQL enables remote content releases, `target_path` routing, and the `nexus-hack-content` Storage bucket. The iOS client and the PC panel both use the same Supabase project URL and publishable key; admin writes require Supabase Auth plus a row in `public.license_admins`.
+The combined SQL enables remote content releases, `target_path` routing, the `nexus-hack-content` Storage bucket, and a remote visual manifest for categories, nested categories, announcements, social links, icons, and patch thumbnails. Edit the visual JSON in the panel under `Diseno remoto`, then publish; the next sync updates the app without a new IPA. The iOS client and the PC panel both use the same Supabase project URL and publishable key; admin writes require Supabase Auth plus a row in `public.license_admins`.
 
 The app and admin panel use the Supabase project `oxtyyazqagmfhkgprpsp` and the public publishable key stored in their client configuration. The admin panel runs locally with `admin/start-panel.cmd`; it is intended to be opened at `http://localhost:8787`.
 

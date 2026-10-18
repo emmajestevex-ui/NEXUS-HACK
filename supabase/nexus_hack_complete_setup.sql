@@ -1,6 +1,7 @@
 -- NEXUS HACK - COMPLETE SUPABASE SETUP
 -- Paste this entire file into the Supabase SQL Editor and click Run.
--- Order: licenses, remote content, admin emails, duplicate remote patches, final RPC refresh.
+-- Includes licenses, remote files, remote design/categories/socials, admin emails,
+-- duplicate target routes, thumbnails and final license RPC refresh.
 -- This script does not contain a service-role key.
 
 
@@ -928,6 +929,61 @@ create table if not exists public.remote_content_releases (
     check (version >= 0)
 );
 
+create table if not exists public.nexus_app_settings (
+    id text primary key default 'main',
+    content jsonb not null default '{}'::jsonb,
+    updated_by uuid references auth.users(id) on delete set null,
+    updated_at timestamptz not null default now(),
+    check (id = 'main')
+);
+
+insert into public.nexus_app_settings (id, content)
+values (
+    'main',
+    '{
+      "title": "NEXUS HACK",
+      "subtitle": "Control privado",
+      "announcement": {"title": "Centro NEXUS", "body": "Sincroniza para recibir las novedades.", "icon": "sparkles", "color": "blue"},
+      "categories": [],
+      "socials": [
+        {"title": "Discord", "subtitle": "Comunidad NEXUS HACK", "url": "https://discord.gg/9NUBpqNGQ", "icon": "bubble.left.and.bubble.right.fill", "color": "blue"},
+        {"title": "TikTok", "subtitle": "@tumbado_sensi7", "url": "https://www.tiktok.com/@tumbado_sensi7", "icon": "music.note", "color": "black"}
+      ]
+    }'::jsonb
+)
+on conflict (id) do nothing;
+
+alter table public.nexus_app_settings enable row level security;
+revoke all on public.nexus_app_settings from anon, authenticated;
+
+create or replace function public.admin_get_app_settings()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_license_admin() then raise exception 'Not authorized'; end if;
+    return coalesce((select content from public.nexus_app_settings where id = 'main'), '{}'::jsonb);
+end;
+$$;
+
+create or replace function public.admin_update_app_settings(p_content jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    if not public.is_license_admin() then raise exception 'Not authorized'; end if;
+    if jsonb_typeof(coalesce(p_content, '{}'::jsonb)) <> 'object' then raise exception 'Content must be a JSON object'; end if;
+    insert into public.nexus_app_settings (id, content, updated_by, updated_at)
+    values ('main', coalesce(p_content, '{}'::jsonb), auth.uid(), now())
+    on conflict (id) do update set content = excluded.content, updated_by = excluded.updated_by, updated_at = excluded.updated_at;
+    return jsonb_build_object('success', true, 'content', p_content);
+end;
+$$;
+
 create index if not exists remote_content_files_slug_idx
 on public.remote_content_files (slug);
 
@@ -1489,6 +1545,7 @@ declare
     v_published_at timestamptz := now();
     v_files jsonb;
     v_manifest jsonb;
+    v_app_content jsonb;
 begin
     if not public.is_license_admin() then
         raise exception 'Not authorized';
@@ -1525,12 +1582,18 @@ begin
     into v_files
     from public.remote_content_files f;
 
+    select coalesce(content, '{}'::jsonb)
+    into v_app_content
+    from public.nexus_app_settings
+    where id = 'main';
+
     v_manifest := jsonb_build_object(
         'success', true,
         'message', 'Manifest ready',
         'version', v_next_version,
         'published_at', v_published_at,
-        'files', v_files
+        'files', v_files,
+        'app_content', coalesce(v_app_content, '{}'::jsonb)
     );
 
     insert into public.remote_content_releases (
@@ -1631,6 +1694,8 @@ grant execute on function public.admin_delete_remote_content_file(uuid) to authe
 grant execute on function public.admin_disable_remote_content_target(text, text, text, text, text, text) to authenticated;
 grant execute on function public.admin_publish_remote_content() to authenticated;
 grant execute on function public.get_remote_content_manifest(text, text, text, text, text) to anon, authenticated;
+grant execute on function public.admin_get_app_settings() to authenticated;
+grant execute on function public.admin_update_app_settings(jsonb) to authenticated;
 
 
 
