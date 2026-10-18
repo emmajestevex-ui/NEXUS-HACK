@@ -72,9 +72,10 @@ struct ContentView: View {
             .filter(\.enabled)
             .sorted { $0.sortOrder < $1.sortOrder }
 
-        guard !isUnlocked else { return allTabs }
-        let publicKinds: Set<String> = ["home", "installation", "socials", "membership", "support"]
-        return allTabs.filter { publicKinds.contains($0.kind) }
+        let withoutRemovedSections = allTabs.filter { !["installation", "socials"].contains($0.kind) }
+        guard !isUnlocked else { return withoutRemovedSections }
+        let publicKinds: Set<String> = ["home", "membership", "support"]
+        return withoutRemovedSections.filter { publicKinds.contains($0.kind) }
     }
 
     @ViewBuilder
@@ -266,10 +267,11 @@ private struct NexusSupportView: View {
     let socials: [NexusAppSocial]
 
     private var supportLinks: [NexusAppSocial] {
-        if !socials.isEmpty { return socials }
+        if let discord = socials.first(where: { $0.title.localizedCaseInsensitiveContains("discord") }) {
+            return [discord]
+        }
         return [
-            NexusAppSocial(title: "Discord", subtitle: "Soporte y comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue"),
-            NexusAppSocial(title: "TikTok", subtitle: "Novedades y contenido", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black")
+            NexusAppSocial(title: "Discord", subtitle: "Soporte y comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue")
         ]
     }
 
@@ -573,10 +575,8 @@ private struct GreegHomeView: View {
                     remoteCategoriesCard.nexusEntrance(index: 2)
                     sectionTitle("ARCHIVOS PRINCIPALES").nexusEntrance(index: 3)
                     mainFilesCard.nexusEntrance(index: 4)
-                    sectionTitle("REDES").nexusEntrance(index: 5)
-                    compactSocialCard.nexusEntrance(index: 6)
-                    sectionTitle("ACTUALIZACIONES").nexusEntrance(index: 7)
-                    updatesCard.nexusEntrance(index: 8)
+                    sectionTitle("ACTUALIZACIONES").nexusEntrance(index: 5)
+                    updatesCard.nexusEntrance(index: 6)
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 10)
@@ -993,6 +993,7 @@ private extension RemoteContentFile {
 
 private struct GreegPatchLibraryView: View {
     @EnvironmentObject private var store: PatchProjectStore
+    @State private var selectedSectionID: String?
 
     private static let featuredDisplayOrder = [
         "Pecho + ANTENA",
@@ -1043,11 +1044,15 @@ private struct GreegPatchLibraryView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     headerCard
 
+                    if groupedItems.count > 1 {
+                        sectionPicker
+                    }
+
                     if visibleItems.isEmpty {
                         emptyCard
                     } else {
                         VStack(alignment: .leading, spacing: 14) {
-                            ForEach(groupedItems) { section in
+                            ForEach(displayedSections) { section in
                                 VStack(alignment: .leading, spacing: 9) {
                                     Text(section.kind.sectionTitle)
                                         .font(.caption.weight(.black))
@@ -1057,12 +1062,7 @@ private struct GreegPatchLibraryView: View {
 
                                     VStack(spacing: 9) {
                                         ForEach(section.items) { item in
-                                            NavigationLink {
-                                                GreegPatchDetailView(projectID: item.id)
-                                            } label: {
-                                                GreegPatchRow(item: item)
-                                            }
-                                            .buttonStyle(.plain)
+                                            GreegPatchRow(item: item)
                                         }
                                     }
                                 }
@@ -1098,6 +1098,57 @@ private struct GreegPatchLibraryView: View {
                     .foregroundStyle(.green)
             }
         }
+    }
+
+    private var displayedSections: [GreegPatchSection] {
+        guard let selectedSectionID else { return groupedItems }
+        let filtered = groupedItems.filter { $0.id == selectedSectionID }
+        return filtered.isEmpty ? groupedItems : filtered
+    }
+
+    private var sectionPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                patchSectionChip(title: "Todos", icon: "square.grid.2x2.fill", tint: AppTheme.accent, isSelected: selectedSectionID == nil) {
+                    selectedSectionID = nil
+                }
+                ForEach(groupedItems) { section in
+                    patchSectionChip(
+                        title: section.kind.sectionTitle,
+                        icon: section.kind.iconName,
+                        tint: section.kind.tint,
+                        isSelected: selectedSectionID == section.id
+                    ) {
+                        selectedSectionID = section.id
+                    }
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+
+    private func patchSectionChip(
+        title: String,
+        icon: String,
+        tint: Color,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: {
+            NexusHaptics.selection()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                action()
+            }
+        }) {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(isSelected ? .white : tint)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(isSelected ? tint : tint.opacity(0.12), in: Capsule())
+                .overlay(Capsule().stroke(tint.opacity(isSelected ? 0.9 : 0.34), lineWidth: 1))
+        }
+        .buttonStyle(NexusPressStyle())
     }
 
     private var emptyCard: some View {
@@ -1317,7 +1368,10 @@ private enum GreegPatchStyle: String, Hashable {
 }
 
 private struct GreegPatchRow: View {
+    @EnvironmentObject private var store: PatchProjectStore
     let item: PatchLibraryItem
+    @State private var isWorking = false
+    @State private var actionAlert: GreegPatchActionAlert?
 
     private var project: PatchProject? { item.project }
     private var isApplied: Bool { DevicePatchService.latestReceipt(projectID: item.id) != nil }
@@ -1326,29 +1380,49 @@ private struct GreegPatchRow: View {
     var body: some View {
         GreegPanel {
             HStack(spacing: 11) {
-                AppRowIcon(
-                    systemName: iconName,
-                    tint: kind.tint,
-                    symbolSize: 15,
-                    frameSize: 36
-                )
+                NavigationLink {
+                    GreegPatchDetailView(projectID: item.id)
+                } label: {
+                    HStack(spacing: 11) {
+                        AppRowIcon(
+                            systemName: iconName,
+                            tint: kind.tint,
+                            symbolSize: 15,
+                            frameSize: 36
+                        )
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(project?.name ?? "Archivo NEXUS HACK")
-                        .font(.headline.weight(.black))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    Text(isApplied ? "Activo" : "Listo para aplicar")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(project?.name ?? "Archivo NEXUS HACK")
+                                .font(.headline.weight(.black))
+                                .foregroundStyle(.white)
+                                .lineLimit(2)
+                            Text(isApplied ? "Activo" : "Listo para activar")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
+                .buttonStyle(.plain)
 
                 Spacer(minLength: 8)
 
-                Image(systemName: isApplied ? "checkmark.seal.fill" : "chevron.right")
-                    .font(.subheadline.weight(.black))
-                    .foregroundStyle(isApplied ? .green : kind.tint)
+                Button(action: togglePatch) {
+                    Image(systemName: isWorking ? "arrow.triangle.2.circlepath" : (isApplied ? "checkmark.circle.fill" : "circle"))
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(isApplied ? NexusTheme.success : kind.tint)
+                        .scaleEffect(isApplied ? 1.04 : 1)
+                        .animation(.spring(response: 0.28, dampingFraction: 0.72), value: isApplied)
+                }
+                .buttonStyle(NexusPressStyle())
+                .disabled(isWorking)
             }
+        }
+        .alert(item: $actionAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
@@ -1361,6 +1435,57 @@ private struct GreegPatchRow: View {
             return "target"
         }
         return kind.iconName
+    }
+
+    private func togglePatch() {
+        if isApplied {
+            restore()
+        } else {
+            apply()
+        }
+    }
+
+    private func apply() {
+        guard let itemProject = item.project else { return }
+        isWorking = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                let project = item.summary.schemaVersion >= 2 && item.canInspectContents
+                    ? try PatchProjectLibrary.synchronizeWorkspace(item: item)
+                    : itemProject
+                _ = try DevicePatchService.apply(project: project)
+                await MainActor.run {
+                    store.reload()
+                    isWorking = false
+                    actionAlert = GreegPatchActionAlert(title: "Activado", message: "El patch está activo. Puedes tocar el check nuevamente para restaurar el original.")
+                }
+            } catch {
+                await MainActor.run {
+                    isWorking = false
+                    actionAlert = GreegPatchActionAlert(title: "No se pudo activar", message: "Revisa que la aplicación destino esté disponible e inténtalo de nuevo.")
+                }
+            }
+        }
+    }
+
+    private func restore() {
+        guard let receipt = DevicePatchService.latestReceipt(projectID: item.id) else { return }
+        isWorking = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                try DevicePatchService.restore(receipt: receipt, allowChangedTargets: true)
+                await MainActor.run {
+                    store.reload()
+                    isWorking = false
+                    actionAlert = GreegPatchActionAlert(title: "Original restaurado", message: "El archivo volvió a su estado original.")
+                }
+            } catch {
+                await MainActor.run {
+                    isWorking = false
+                    actionAlert = GreegPatchActionAlert(title: "No se pudo restaurar", message: "No se pudo volver al original de forma segura.")
+                }
+            }
+        }
     }
 }
 
@@ -1395,15 +1520,9 @@ private struct GreegPatchDetailView: View {
             VStack(spacing: 14) {
                 statusCard
 
-                Link(destination: GreegSocialLink.tiktok.url) {
-                    GreegPanel {
-                        SocialRow(link: .tiktok)
-                    }
-                }
-
                 actionButton(
-                    title: isWorking ? "Aplicando" : "Aplicar",
-                    subtitle: "Activar archivo",
+                    title: isWorking ? "Activando" : "Activar",
+                    subtitle: "Encender este patch",
                     systemImage: "checkmark.shield.fill",
                     isPrimary: true,
                     isDisabled: isWorking || isApplied,
@@ -1411,7 +1530,7 @@ private struct GreegPatchDetailView: View {
                 )
 
                 actionButton(
-                    title: isWorking ? "Restaurando" : "Original",
+                    title: isWorking ? "Restaurando" : "Restaurar original",
                     subtitle: "Volver al original",
                     systemImage: "arrow.counterclockwise.circle.fill",
                     isPrimary: false,
