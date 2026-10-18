@@ -69,7 +69,7 @@ struct ContentView: View {
             ["files", "membership", "support"].contains($0.kind) && !configuredIDs.contains($0.id)
         }
         let categoryTabs = remoteContentStore.appContent.categories
-            .filter { !configuredIDs.contains($0.id) }
+            .filter { $0.parentID == nil && !configuredIDs.contains($0.id) }
             .map { category in
                 NexusAppTab(
                     id: category.id,
@@ -494,7 +494,7 @@ private struct NexusCategoryTabView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     GreegPanel {
                         HStack(spacing: 12) {
-                            AppRowIcon(systemName: category.icon, tint: AppTheme.accent, symbolSize: 20, frameSize: 48)
+                            NexusRemoteArtwork(systemName: category.icon, iconURL: category.iconURL, tint: nexusCategoryColor(category.color), size: 48)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(category.title).font(.title3.weight(.black))
                                 Text(category.subtitle.isEmpty ? "Contenido remoto de NEXUS HACK" : category.subtitle)
@@ -519,7 +519,7 @@ private struct NexusCategoryTabView: View {
                                 } label: {
                                     GreegPanel {
                                         HStack(spacing: 12) {
-                                            AppRowIcon(systemName: child.icon, tint: AppTheme.accent, symbolSize: 17, frameSize: 42)
+                                            NexusRemoteArtwork(systemName: child.icon, iconURL: child.iconURL, tint: nexusCategoryColor(child.color), size: 42)
                                             VStack(alignment: .leading, spacing: 3) {
                                                 Text(child.title).font(.headline.weight(.bold))
                                                 Text(child.subtitle.isEmpty ? "Abrir apartado" : child.subtitle)
@@ -542,9 +542,7 @@ private struct NexusCategoryTabView: View {
                     if files.isEmpty {
                         GreegPanel {
                             VStack(spacing: 10) {
-                                Image(systemName: category.icon)
-                                    .font(.system(size: 30, weight: .semibold))
-                                    .foregroundStyle(AppTheme.accent)
+                                NexusRemoteArtwork(systemName: category.icon, iconURL: category.iconURL, tint: nexusCategoryColor(category.color), size: 54)
                                 Text("Sin contenido todavía")
                                     .font(.headline.weight(.bold))
                                 Text("Publica archivos en esta categoría y pulsa Sincronizar.")
@@ -573,6 +571,48 @@ private struct NexusCategoryTabView: View {
             .navigationTitle(category.title)
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+}
+
+private func nexusCategoryColor(_ value: String) -> Color {
+    switch value.lowercased() {
+    case "black": return Color.primary
+    case "gray", "grey": return Color.secondary
+    default: return AppTheme.accent
+    }
+}
+
+private struct NexusRemoteArtwork: View {
+    let systemName: String
+    let iconURL: String?
+    let tint: Color
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: max(10, size * 0.2), style: .continuous)
+                .fill(tint.opacity(0.14))
+
+            if let iconURL, let url = URL(string: iconURL) {
+                AsyncImage(url: url, transaction: Transaction(animation: .easeInOut(duration: 0.2))) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        Image(systemName: systemName)
+                            .font(.system(size: size * 0.38, weight: .semibold))
+                            .foregroundStyle(tint)
+                    }
+                }
+                .padding(size * 0.1)
+                .clipShape(RoundedRectangle(cornerRadius: max(10, size * 0.2), style: .continuous))
+            } else {
+                Image(systemName: systemName)
+                    .font(.system(size: size * 0.38, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 
@@ -896,7 +936,9 @@ private struct GreegHomeView: View {
     }
 
     private var remoteCategoriesCard: some View {
-        let categories = remoteContentStore.appContent.categories.sorted { $0.sortOrder < $1.sortOrder }
+        let categories = remoteContentStore.appContent.categories
+            .filter { $0.parentID == nil }
+            .sorted { $0.sortOrder < $1.sortOrder }
         return Group {
             if !isUnlocked {
                 NexusCard(style: .elevated) {
@@ -927,7 +969,7 @@ private struct GreegHomeView: View {
                         }
                         GreegPanel {
                             HStack(spacing: 12) {
-                                AppRowIcon(systemName: category.icon, tint: themeColor(category.color), symbolSize: 17, frameSize: 42)
+                                NexusRemoteArtwork(systemName: category.icon, iconURL: category.iconURL, tint: themeColor(category.color), size: 42)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(category.title).font(.headline.weight(.bold))
                                     Text(category.subtitle.isEmpty ? "Contenido actualizado por sincronización" : category.subtitle)
@@ -1024,11 +1066,17 @@ private struct RemoteFileMiniRow: View {
             RemoteFileArtwork(file: file, tint: tint)
             VStack(alignment: .leading, spacing: 2) {
                 Text(file.name).font(.subheadline.weight(.bold)).lineLimit(1)
-                Text(file.description?.nexusCleanDescription ?? "Disponible después de sincronizar")
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                if file.isTextContent, let textContent = file.textContent?.trimmingCharacters(in: .whitespacesAndNewlines), !textContent.isEmpty {
+                    Text(textContent)
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                } else {
+                    Text(file.description?.nexusCleanDescription ?? "Disponible después de sincronizar")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
             Spacer()
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(tint)
+            Image(systemName: file.isTextContent ? "doc.text.fill" : "checkmark.circle.fill")
+                .foregroundStyle(tint)
         }
         .padding(.vertical, 2)
     }
@@ -1045,6 +1093,11 @@ private struct RemoteFileArtwork: View {
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { fallback }
                 }
+            } else if file.isTextContent {
+                Image(systemName: "doc.text.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else { fallback }
         }
         .frame(width: 38, height: 38)

@@ -3,6 +3,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const SUPABASE_URL = "https://oxtyyazqagmfhkgprpsp.supabase.co";
 const SUPABASE_KEY = "sb_publishable_IEtNXoVHdutPKd4g_ej0MA_IF-yXUR8";
 const BUCKET = "nexus-hack-content";
+const UI_BUCKET = "nexus-hack-ui";
 const SCRIPT_VERSION = "20261005-ios27-install";
 const DEFAULT_TARGET_BUNDLE = "com.dts.freefireth";
 const FREE_FIRE_MAX_BUNDLE = "com.dts.freefiremax";
@@ -168,6 +169,7 @@ const els = {
   nameInput: $("#nameInput"),
   slugInput: $("#slugInput"),
   categoryInput: $("#categoryInput"),
+  categoryTypeHint: $("#categoryTypeHint"),
   styleInput: $("#styleInput"),
   targetBundleInput: $("#targetBundleInput"),
   assetVariantLabel: $("#assetVariantLabel"),
@@ -175,6 +177,9 @@ const els = {
   targetPathInput: $("#targetPathInput"),
   descriptionInput: $("#descriptionInput"),
   thumbnailInput: $("#thumbnailInput"),
+  textContentLabel: $("#textContentLabel"),
+  textContentInput: $("#textContentInput"),
+  fileUploadLabel: $("#fileUploadLabel"),
   fileInput: $("#fileInput"),
   saveButton: $("#saveButton"),
   newButton: $("#newButton"),
@@ -219,6 +224,7 @@ const els = {
   categoryIconInput: $("#categoryIconInput"),
   categoryIconFileInput: $("#categoryIconFileInput"),
   categoryColorInput: $("#categoryColorInput"),
+  categoryContentTypeInput: $("#categoryContentTypeInput"),
   categoryParentInput: $("#categoryParentInput"),
   categoryOrderInput: $("#categoryOrderInput"),
   categoryList: $("#categoryList"),
@@ -283,9 +289,10 @@ function bindEvents() {
     els.slugInput.dataset.touched = "true";
     els.slugInput.value = safeSlug(els.slugInput.value);
   });
-  els.categoryInput.addEventListener("change", suggestTargetPath);
+  els.categoryInput.addEventListener("change", updateCategoryTypeUI);
   els.styleInput.addEventListener("change", () => {
     els.categoryInput.value = categoryForStyle(els.styleInput.value, els.categoryInput.value);
+    updateCategoryTypeUI();
   });
   els.targetBundleInput.addEventListener("change", syncAssetVariantWithTargetBundle);
   els.assetVariantInput.addEventListener("change", () => {
@@ -513,17 +520,102 @@ async function loadSettings() {
   els.settingsStatusText.textContent = "Diseno cargado. Puedes editar categorias, subcategorias, anuncios y redes.";
 }
 
+const BUILTIN_CATEGORY_CHOICES = [
+  { id: "files", title: "Archivos", content_type: "patch" },
+  { id: "aimbots", title: "Aimbots", content_type: "patch" },
+  { id: "patches", title: "Patches", content_type: "patch" },
+  { id: "images", title: "Imágenes", content_type: "patch" },
+  { id: "configs", title: "Configs", content_type: "patch" },
+  { id: "media", title: "Media", content_type: "patch" },
+  { id: "shaders", title: "Shaders", content_type: "patch" },
+];
+
+function categoryContentType(category) {
+  return String(category?.content_type || category?.type || "patch").toLowerCase() === "text" ? "text" : "patch";
+}
+
+function categoryById(id) {
+  return (state.appContent?.categories || []).find((category) => category.id === id) || null;
+}
+
+function categoryPath(id, categories = state.appContent?.categories || [], seen = new Set()) {
+  const category = categories.find((item) => item.id === id);
+  if (!category || seen.has(id)) return category?.title || id || "Archivos";
+  const nextSeen = new Set(seen);
+  nextSeen.add(id);
+  const parent = category.parent_id ? categoryPath(category.parent_id, categories, nextSeen) : "";
+  return parent ? `${parent} / ${category.title || category.id}` : (category.title || category.id);
+}
+
+function categoryDescendants(id, categories = state.appContent?.categories || []) {
+  const descendants = new Set();
+  const pending = id ? [id] : [];
+  while (pending.length) {
+    const current = pending.pop();
+    for (const category of categories) {
+      if (category.parent_id === current && !descendants.has(category.id)) {
+        descendants.add(category.id);
+        pending.push(category.id);
+      }
+    }
+  }
+  return descendants;
+}
+
+function allCategoryChoices() {
+  const configured = Array.isArray(state.appContent?.categories) ? state.appContent.categories : [];
+  const choices = [...configured];
+  for (const builtin of BUILTIN_CATEGORY_CHOICES) {
+    if (!choices.some((category) => category.id === builtin.id)) choices.push(builtin);
+  }
+  return choices;
+}
+
+function renderFileCategoryOptions(selectedID = els.categoryInput.value || "files") {
+  const choices = allCategoryChoices();
+  const sorted = [...choices].sort((a, b) => categoryPath(a.id, choices).localeCompare(categoryPath(b.id, choices), "es"));
+  els.categoryInput.innerHTML = sorted.map((category) => `
+    <option value="${escapeHtml(category.id)}" data-content-type="${categoryContentType(category)}">
+      ${escapeHtml(categoryPath(category.id, choices))} · ${categoryContentType(category) === "text" ? "Texto" : "Patch"}
+    </option>
+  `).join("");
+  els.categoryInput.value = sorted.some((category) => category.id === selectedID) ? selectedID : (sorted[0]?.id || "files");
+  updateCategoryTypeUI();
+}
+
+function updateCategoryTypeUI() {
+  const category = categoryById(els.categoryInput.value) || allCategoryChoices().find((item) => item.id === els.categoryInput.value);
+  const type = categoryContentType(category);
+  const isText = type === "text";
+  els.categoryTypeHint.textContent = category
+    ? `${categoryPath(category.id, allCategoryChoices())} · ${isText ? "Texto / tutorial" : "Patch / archivo"}`
+    : "Selecciona la sección exacta donde aparecerá.";
+  els.textContentLabel.classList.toggle("hidden", !isText);
+  els.fileUploadLabel.querySelector(".fieldHint").textContent = isText
+    ? "Opcional. Si no subes archivo, se generará un documento de texto automáticamente."
+    : "Obligatorio para categorías tipo patch.";
+  els.fileInput.required = !isText;
+  if (!isText) els.textContentInput.value = "";
+  suggestTargetPath();
+}
+
 function renderCategoryEditor() {
   const content = state.appContent || DEFAULT_APP_CONTENT;
   const categories = Array.isArray(content.categories) ? content.categories : [];
   els.categoryParentInput.innerHTML = '<option value="">Sin padre</option>' + categories
-    .filter((category) => category.id !== els.editingCategoryId.value)
-    .map((category) => `<option value="${escapeHtml(category.id)}">${escapeHtml(category.title || category.id)}</option>`)
+    .filter((category) => {
+      const editingID = els.editingCategoryId.value;
+      return category.id !== editingID && !categoryDescendants(editingID, categories).has(category.id);
+    })
+    .sort((a, b) => categoryPath(a.id, categories).localeCompare(categoryPath(b.id, categories), "es"))
+    .map((category) => `<option value="${escapeHtml(category.id)}">${escapeHtml(categoryPath(category.id, categories))}</option>`)
     .join("");
-  els.categoryList.innerHTML = categories.length ? categories.map((category) => `
+  renderFileCategoryOptions();
+  const orderedCategories = [...categories].sort((a, b) => categoryPath(a.id, categories).localeCompare(categoryPath(b.id, categories), "es"));
+  els.categoryList.innerHTML = categories.length ? orderedCategories.map((category) => `
     <article class="categoryEditorCard">
       <div class="categoryEditorIcon"><span class="sfIcon">${escapeHtml(category.icon || "square.grid.2x2.fill")}</span></div>
-      <div class="categoryEditorMain"><strong>${escapeHtml(category.title || category.id)}</strong><span>${escapeHtml(category.subtitle || "Sin descripción")}</span><small>${escapeHtml(category.color || "blue")} · orden ${Number(category.sort_order || 0)}</small></div>
+      <div class="categoryEditorMain"><strong>${escapeHtml(categoryPath(category.id, categories))}</strong><span>${escapeHtml(category.subtitle || "Sin descripción")}</span><small>${escapeHtml(category.color || "blue")} · ${categoryContentType(category) === "text" ? "Texto" : "Patch"} · orden ${Number(category.sort_order || 0)}</small></div>
       <div class="categoryEditorActions"><button class="ghost categoryEditButton" data-category-id="${escapeHtml(category.id)}" type="button">Editar</button><button class="ghost categoryDeleteButton" data-category-id="${escapeHtml(category.id)}" type="button">Eliminar</button></div>
     </article>`).join("") : '<p class="muted">Todavía no hay categorías. Pulsa Nueva categoría.</p>';
   els.categoryList.querySelectorAll(".categoryEditButton").forEach((button) => button.addEventListener("click", () => openCategoryEditor(button.dataset.categoryId)));
@@ -552,6 +644,9 @@ function openCategoryEditor(id = "") {
   els.categorySubtitleInput.value = category?.subtitle || "";
   els.categoryIconInput.value = category?.icon || "square.grid.2x2.fill";
   els.categoryColorInput.value = category?.color || "blue";
+  els.categoryContentTypeInput.value = categoryContentType(category);
+  els.categoryContentTypeInput.closest("label")?.classList.remove("hidden");
+  els.categoryParentInput.closest("label")?.classList.remove("hidden");
   els.categoryOrderInput.value = String(category?.sort_order ?? ((state.appContent?.categories || []).length * 10));
   renderCategoryEditor();
   els.categoryParentInput.value = category?.parent_id || "";
@@ -568,6 +663,8 @@ function openTabEditor(id) {
   els.categorySubtitleInput.value = "";
   els.categoryIconInput.value = tab.icon || "square.grid.2x2.fill";
   els.categoryColorInput.value = "blue";
+  els.categoryContentTypeInput.value = "patch";
+  els.categoryContentTypeInput.closest("label")?.classList.add("hidden");
   els.categoryOrderInput.value = String(tab.sort_order || 0);
   els.categoryParentInput.closest("label")?.classList.add("hidden");
   els.categoryIconFileInput.value = "";
@@ -579,6 +676,7 @@ function closeCategoryEditor() {
   els.categoryForm.classList.add("hidden");
   els.editingCategoryId.value = "";
   els.categoryParentInput.closest("label")?.classList.remove("hidden");
+  els.categoryContentTypeInput.closest("label")?.classList.remove("hidden");
   renderCategoryEditor();
 }
 
@@ -605,11 +703,11 @@ async function saveCategoryFromForm(event) {
   const iconFile = els.categoryIconFileInput.files?.[0];
   if (iconFile) {
     const iconPath = `content/ui-icons/${crypto.randomUUID()}.${safeStorageFileName(iconFile.name).split(".").pop() || "png"}`;
-    const { error } = await supabaseClient.storage.from(BUCKET).upload(iconPath, iconFile, { cacheControl: "31536000", contentType: iconFile.type || "image/png", upsert: true });
+    const { error } = await supabaseClient.storage.from(UI_BUCKET).upload(iconPath, iconFile, { cacheControl: "31536000", contentType: iconFile.type || "image/png", upsert: true });
     if (error) { els.settingsStatusText.textContent = adminErrorMessage(error); return; }
-    iconURL = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${iconPath}`;
+    iconURL = `${SUPABASE_URL}/storage/v1/object/public/${UI_BUCKET}/${iconPath}`;
   }
-  const item = { id, title: els.categoryNameInput.value.trim(), subtitle: els.categorySubtitleInput.value.trim(), icon: els.categoryIconInput.value.trim() || "square.grid.2x2.fill", icon_url: iconURL, color: els.categoryColorInput.value, parent_id: els.categoryParentInput.value || null, sort_order: Number(els.categoryOrderInput.value || 0) };
+  const item = { id, title: els.categoryNameInput.value.trim(), subtitle: els.categorySubtitleInput.value.trim(), icon: els.categoryIconInput.value.trim() || "square.grid.2x2.fill", icon_url: iconURL, color: els.categoryColorInput.value, content_type: els.categoryContentTypeInput.value === "text" ? "text" : "patch", parent_id: els.categoryParentInput.value || null, sort_order: Number(els.categoryOrderInput.value || 0) };
   const index = content.categories.findIndex((category) => category.id === els.editingCategoryId.value);
   if (index >= 0) content.categories[index] = item;
   else content.categories.push(item);
@@ -744,19 +842,29 @@ async function saveFile(event) {
   event.preventDefault();
   if (!state.session || state.busy) return;
 
-  const file = els.fileInput.files?.[0];
+  const name = els.nameInput.value.trim();
+  const slug = safeSlug(els.slugInput.value || name);
+  const selectedCategory = categoryById(els.categoryInput.value) || allCategoryChoices().find((item) => item.id === els.categoryInput.value) || { id: els.categoryInput.value || "files", content_type: "patch" };
+  const contentType = categoryContentType(selectedCategory);
+  const textBody = els.textContentInput.value.trim();
+  let file = els.fileInput.files?.[0] || null;
+  if (contentType === "text") {
+    if (!textBody) {
+      setStatus("Escribe el contenido de texto antes de publicar.");
+      return;
+    }
+    file = new File([textBody], `${slug || "contenido"}.txt`, { type: "text/plain;charset=utf-8" });
+  }
   if (!file) {
-    setStatus("Selecciona un archivo.");
+    setStatus("Selecciona un archivo para esta categoría tipo patch.");
     return;
   }
 
-  const name = els.nameInput.value.trim();
-  const slug = safeSlug(els.slugInput.value || name);
   const selectedAssetVariant = els.assetVariantLabel.classList.contains("hidden")
     ? null
     : ASSET_VARIANTS[els.assetVariantInput.value];
   const targetBundle = safeTargetBundle(selectedAssetVariant?.targetBundle || els.targetBundleInput.value);
-  const targetPath = safeRelativePath(selectedAssetVariant?.targetPath || els.targetPathInput.value || `${els.categoryInput.value}/${file.name}`);
+  const targetPath = safeRelativePath(selectedAssetVariant?.targetPath || els.targetPathInput.value || `${contentType === "text" ? "text" : selectedCategory.id}/${file.name}`);
   if (!name || !slug) {
     setStatus("Completa nombre y slug.");
     return;
@@ -808,15 +916,19 @@ async function saveFile(event) {
       p_id: els.editingId.value || null,
       p_name: name,
       p_slug: slug,
-      p_category: categoryForStyle(els.styleInput.value, els.categoryInput.value),
+      p_category: selectedCategory.id,
       p_target_bundle: targetBundle,
       p_target_path: targetPath,
-      p_description: withStyleMarker(withThumbnailMarker(els.descriptionInput.value, thumbnailPath), els.styleInput.value),
+      p_description: contentType === "text"
+        ? withThumbnailMarker(els.descriptionInput.value, thumbnailPath)
+        : withStyleMarker(withThumbnailMarker(els.descriptionInput.value, thumbnailPath), els.styleInput.value),
       p_file_name: file.name,
       p_mime_type: file.type || "application/octet-stream",
       p_byte_size: file.size,
       p_sha256: hash,
       p_storage_path: storagePath,
+      p_content_type: contentType,
+      p_text_content: contentType === "text" ? textBody : null,
       p_force_new: !isReplacing,
     });
 
@@ -830,8 +942,8 @@ async function saveFile(event) {
     resetForm();
     await loadFiles();
     setStatus(isReplacing
-      ? "Patch reemplazado. Pulsa Publicar cambios cuando estes listo."
-      : "Patch nuevo creado. Pulsa Publicar cambios cuando estes listo."
+      ? `${contentType === "text" ? "Texto" : "Patch"} reemplazado. Pulsa Publicar cambios cuando estes listo.`
+      : `${contentType === "text" ? "Texto" : "Patch"} nuevo creado. Pulsa Publicar cambios cuando estes listo.`
     );
   } catch (error) {
     const message = adminErrorMessage(error);
@@ -979,6 +1091,8 @@ function editFile(file) {
   updateAssetVariantVisibility();
   els.descriptionInput.value = cleanDescription(file.description);
   els.fileInput.value = "";
+  els.textContentInput.value = file.text_content || "";
+  updateCategoryTypeUI();
   els.saveButton.textContent = "Reemplazar archivo";
   els.nameInput.focus();
 }
@@ -990,9 +1104,11 @@ function resetForm() {
   delete els.slugInput.dataset.touched;
   delete els.targetPathInput.dataset.touched;
   els.categoryInput.value = "files";
+  els.textContentInput.value = "";
   els.styleInput.value = "antena";
   els.targetBundleInput.value = DEFAULT_TARGET_BUNDLE;
   els.targetPathInput.value = "";
+  updateCategoryTypeUI();
   updateAssetVariantVisibility();
   els.saveButton.textContent = "Crear patch nuevo";
   setStatus("Modo nuevo: se creara otro patch, no se reemplazara uno publicado.");
@@ -1226,7 +1342,8 @@ function renderFileCard(file) {
   node.dataset.fileId = file.id;
   node.querySelector("h3").textContent = file.name;
   node.querySelector(".fileMeta").textContent = [
-    file.category || "files",
+    categoryPath(file.category || "files", allCategoryChoices()),
+    file.content_type === "text" ? "Texto" : "Patch",
     `v${file.version}`,
     file.target_bundle || DEFAULT_TARGET_BUNDLE,
     file.file_name,

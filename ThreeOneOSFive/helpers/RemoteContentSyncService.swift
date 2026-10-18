@@ -8,6 +8,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
     let name: String
     let version: Int
     let category: String
+    let contentType: String
+    let textContent: String?
     let description: String?
     let targetBundle: String?
     let targetPath: String?
@@ -26,6 +28,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         case name
         case version
         case category
+        case contentType = "content_type"
+        case textContent = "text_content"
         case description
         case targetBundle = "target_bundle"
         case targetPath = "target_path"
@@ -46,6 +50,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         name = ((try? container.decode(String.self, forKey: .name)) ?? slug).trimmingCharacters(in: .whitespacesAndNewlines)
         version = (try? container.decode(Int.self, forKey: .version)) ?? 0
         category = ((try? container.decode(String.self, forKey: .category)) ?? "files").trimmingCharacters(in: .whitespacesAndNewlines)
+        contentType = ((try? container.decode(String.self, forKey: .contentType)) ?? "patch").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        textContent = try? container.decodeIfPresent(String.self, forKey: .textContent)
         description = try? container.decodeIfPresent(String.self, forKey: .description)
         targetBundle = (try? container.decodeIfPresent(String.self, forKey: .targetBundle))?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -68,6 +74,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         name: String,
         version: Int,
         category: String,
+        contentType: String = "patch",
+        textContent: String? = nil,
         description: String?,
         targetBundle: String?,
         targetPath: String?,
@@ -85,6 +93,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         self.name = name
         self.version = version
         self.category = category
+        self.contentType = contentType.lowercased() == "text" ? "text" : "patch"
+        self.textContent = textContent
         self.description = description
         self.targetBundle = targetBundle?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         self.targetPath = targetPath?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -105,6 +115,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         try container.encode(name, forKey: .name)
         try container.encode(version, forKey: .version)
         try container.encode(category, forKey: .category)
+        try container.encode(contentType, forKey: .contentType)
+        try container.encodeIfPresent(textContent, forKey: .textContent)
         try container.encodeIfPresent(description, forKey: .description)
         try container.encodeIfPresent(targetBundle, forKey: .targetBundle)
         try container.encodeIfPresent(targetPath, forKey: .targetPath)
@@ -151,6 +163,10 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         isActive && deletedAt == nil
     }
 
+    var isTextContent: Bool {
+        contentType == "text"
+    }
+
     private static func safeComponent(_ value: String, fallback: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let source = trimmed.isEmpty ? fallback : trimmed
@@ -189,11 +205,14 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
     let icon: String
     let iconURL: String?
     let color: String
+    let contentType: String
     let parentID: String?
     let sortOrder: Int
 
     enum CodingKeys: String, CodingKey {
         case id, title, subtitle, icon, color
+        case legacyType = "type"
+        case contentType = "content_type"
         case parentID = "parent_id"
         case sortOrder = "sort_order"
         case iconURL = "icon_url"
@@ -207,8 +226,13 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
         icon = (try? c.decode(String.self, forKey: .icon)) ?? "square.grid.2x2.fill"
         iconURL = try? c.decodeIfPresent(String.self, forKey: .iconURL)
         color = (try? c.decode(String.self, forKey: .color)) ?? "blue"
+        contentType = ((try? c.decode(String.self, forKey: .contentType)) ?? (try? c.decode(String.self, forKey: .legacyType)) ?? "patch").lowercased() == "text" ? "text" : "patch"
         parentID = try? c.decodeIfPresent(String.self, forKey: .parentID)
         sortOrder = (try? c.decode(Int.self, forKey: .sortOrder)) ?? 0
+    }
+
+    var isTextCategory: Bool {
+        contentType == "text"
     }
 }
 

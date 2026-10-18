@@ -76,13 +76,8 @@
               Categoria
               <select id="categoryInput">
                 <option value="files">files</option>
-                <option value="aimbots">aimbots</option>
-                <option value="patches">patches</option>
-                <option value="images">images</option>
-                <option value="configs">configs</option>
-                <option value="media">media</option>
-                <option value="shaders">shaders</option>
               </select>
+              <span id="categoryTypeHint" class="fieldHint">Selecciona la sección exacta donde aparecerá.</span>
             </label>
             <label>
               Color en la app
@@ -122,9 +117,15 @@
               <input id="thumbnailInput" type="file" accept="image/png,image/jpeg,image/webp" />
               <span class="fieldHint">Se muestra junto al nombre y llega con la sincronizacion.</span>
             </label>
-            <label>
+            <label id="textContentLabel" class="hidden">
+              Contenido escrito
+              <textarea id="textContentInput" rows="8" placeholder="Escribe aquí el tutorial, anuncio o información que aparecerá en la app."></textarea>
+              <span class="fieldHint">La app mostrará este texto dentro de la categoría. No necesitas subir un archivo.</span>
+            </label>
+            <label id="fileUploadLabel">
               Archivo nuevo o reemplazo
-              <input id="fileInput" type="file" required />
+              <input id="fileInput" type="file" />
+              <span class="fieldHint">Obligatorio para categorías tipo patch. En categorías de texto se genera automáticamente.</span>
             </label>
             <button id="saveButton" class="primary" type="submit">Crear patch nuevo</button>
           </form>
@@ -186,6 +187,7 @@
               <label>Icono SF Symbol<input id="categoryIconInput" type="text" maxlength="60" value="book.fill" placeholder="book.fill" /><span class="fieldHint">Ejemplo: book.fill, star.fill o bolt.fill.</span></label>
               <label>O subir imagen<input id="categoryIconFileInput" type="file" accept="image/png,image/jpeg,image/webp" /><span class="fieldHint">La imagen reemplaza el icono inferior después de publicar.</span></label>
               <label>Color<select id="categoryColorInput"><option value="blue">Azul</option><option value="gray">Gris</option><option value="black">Negro</option></select></label>
+              <label>Tipo de contenido<select id="categoryContentTypeInput"><option value="patch">Patch / archivo</option><option value="text">Texto / tutorial</option></select><span class="fieldHint">Define qué se podrá publicar dentro de esta sección.</span></label>
               <label>Categoría padre<select id="categoryParentInput"><option value="">Sin padre</option></select></label>
               <label>Orden<input id="categoryOrderInput" type="number" min="0" value="0" /></label>
               <div class="categoryFormActions"><button id="cancelCategoryButton" class="ghost" type="button">Cancelar</button><button class="primary" type="submit">Guardar categoría</button></div>
