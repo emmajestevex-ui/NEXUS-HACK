@@ -144,6 +144,7 @@ const state = {
   files: [],
   licenses: [],
   appContent: null,
+  editorMode: "category",
   session: null,
   busy: false,
 };
@@ -221,6 +222,7 @@ const els = {
   categoryParentInput: $("#categoryParentInput"),
   categoryOrderInput: $("#categoryOrderInput"),
   categoryList: $("#categoryList"),
+  tabList: $("#tabList"),
 };
 
 init();
@@ -480,6 +482,12 @@ const DEFAULT_APP_CONTENT = {
     { id: "aim", title: "AIM", subtitle: "Parches principales", icon: "scope", color: "blue", parent_id: null, sort_order: 0 },
     { id: "tutoriales", title: "Tutoriales", subtitle: "Guías y anuncios", icon: "book.fill", color: "gray", parent_id: null, sort_order: 1 }
   ],
+  tabs: [
+    { id: "home", title: "Inicio", icon: "house.fill", kind: "home", enabled: true, sort_order: 0 },
+    { id: "files", title: "Archivos", icon: "shippingbox.fill", kind: "files", enabled: true, sort_order: 1 },
+    { id: "installation", title: "Instalación", icon: "wrench.and.screwdriver.fill", kind: "installation", enabled: true, sort_order: 2 },
+    { id: "socials", title: "Redes", icon: "link.circle.fill", kind: "socials", enabled: true, sort_order: 3 }
+  ],
   socials: [
     { title: "Discord", subtitle: "Comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
     { title: "TikTok", subtitle: "@tumbado_sensi7", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black" }
@@ -494,8 +502,11 @@ async function loadSettings() {
     els.settingsStatusText.textContent = adminErrorMessage(error);
     return;
   }
-  els.settingsInput.value = JSON.stringify(data || DEFAULT_APP_CONTENT, null, 2);
-  state.appContent = data || DEFAULT_APP_CONTENT;
+  state.appContent = data || structuredClone(DEFAULT_APP_CONTENT);
+  if (!Array.isArray(state.appContent.tabs) || state.appContent.tabs.length === 0) {
+    state.appContent.tabs = structuredClone(DEFAULT_APP_CONTENT.tabs);
+  }
+  els.settingsInput.value = JSON.stringify(state.appContent, null, 2);
   renderCategoryEditor();
   els.settingsStatusText.textContent = "Diseno cargado. Puedes editar categorias, subcategorias, anuncios y redes.";
 }
@@ -515,9 +526,23 @@ function renderCategoryEditor() {
     </article>`).join("") : '<p class="muted">Todavía no hay categorías. Pulsa Nueva categoría.</p>';
   els.categoryList.querySelectorAll(".categoryEditButton").forEach((button) => button.addEventListener("click", () => openCategoryEditor(button.dataset.categoryId)));
   els.categoryList.querySelectorAll(".categoryDeleteButton").forEach((button) => button.addEventListener("click", () => deleteCategory(button.dataset.categoryId)));
+  renderTabEditor();
+}
+
+function renderTabEditor() {
+  const tabs = Array.isArray(state.appContent?.tabs) ? [...state.appContent.tabs].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)) : [];
+  els.tabList.innerHTML = tabs.length ? tabs.map((tab) => `
+    <article class="categoryEditorCard ${tab.enabled === false ? "tabDisabled" : ""}">
+      <div class="categoryEditorIcon"><span class="sfIcon">${escapeHtml(tab.icon || "square.grid.2x2.fill")}</span></div>
+      <div class="categoryEditorMain"><strong>${escapeHtml(tab.title || tab.id)}</strong><span>${escapeHtml(tab.kind || "category")} · orden ${Number(tab.sort_order || 0)}</span><small>${tab.enabled === false ? "Oculta" : "Visible"}</small></div>
+      <div class="categoryEditorActions"><button class="ghost tabEditButton" data-tab-id="${escapeHtml(tab.id)}" type="button">Editar</button><button class="ghost tabToggleButton" data-tab-id="${escapeHtml(tab.id)}" type="button">${tab.enabled === false ? "Mostrar" : "Ocultar"}</button></div>
+    </article>`).join("") : '<p class="muted">No hay pestañas configuradas.</p>';
+  els.tabList.querySelectorAll(".tabEditButton").forEach((button) => button.addEventListener("click", () => openTabEditor(button.dataset.tabId)));
+  els.tabList.querySelectorAll(".tabToggleButton").forEach((button) => button.addEventListener("click", () => toggleTab(button.dataset.tabId)));
 }
 
 function openCategoryEditor(id = "") {
+  state.editorMode = "category";
   const category = (state.appContent?.categories || []).find((item) => item.id === id);
   els.categoryForm.classList.remove("hidden");
   els.editingCategoryId.value = category?.id || "";
@@ -531,15 +556,46 @@ function openCategoryEditor(id = "") {
   els.categoryNameInput.focus();
 }
 
+function openTabEditor(id) {
+  const tab = (state.appContent?.tabs || []).find((item) => item.id === id);
+  if (!tab) return;
+  state.editorMode = "tab";
+  els.categoryForm.classList.remove("hidden");
+  els.editingCategoryId.value = tab.id;
+  els.categoryNameInput.value = tab.title || "";
+  els.categorySubtitleInput.value = "";
+  els.categoryIconInput.value = tab.icon || "square.grid.2x2.fill";
+  els.categoryColorInput.value = "blue";
+  els.categoryOrderInput.value = String(tab.sort_order || 0);
+  els.categoryParentInput.closest("label")?.classList.add("hidden");
+  els.categoryIconFileInput.value = "";
+  els.categoryNameInput.focus();
+}
+
 function closeCategoryEditor() {
+  state.editorMode = "category";
   els.categoryForm.classList.add("hidden");
   els.editingCategoryId.value = "";
+  els.categoryParentInput.closest("label")?.classList.remove("hidden");
   renderCategoryEditor();
 }
 
 async function saveCategoryFromForm(event) {
   event.preventDefault();
   const content = state.appContent || structuredClone(DEFAULT_APP_CONTENT);
+  if (state.editorMode === "tab") {
+    const tab = (content.tabs || []).find((item) => item.id === els.editingCategoryId.value);
+    if (tab) {
+      tab.title = els.categoryNameInput.value.trim() || tab.title;
+      tab.icon = els.categoryIconInput.value.trim() || tab.icon;
+      tab.sort_order = Number(els.categoryOrderInput.value || 0);
+    }
+    state.appContent = content;
+    els.settingsInput.value = JSON.stringify(content, null, 2);
+    closeCategoryEditor();
+    await saveSettings();
+    return;
+  }
   content.categories = Array.isArray(content.categories) ? [...content.categories] : [];
   const id = els.editingCategoryId.value || safeSlug(els.categoryNameInput.value);
   if (!id) return;
@@ -572,6 +628,17 @@ async function deleteCategory(id) {
   await saveSettings();
 }
 
+async function toggleTab(id) {
+  const content = state.appContent || structuredClone(DEFAULT_APP_CONTENT);
+  const tab = (content.tabs || []).find((item) => item.id === id);
+  if (!tab) return;
+  tab.enabled = tab.enabled === false;
+  state.appContent = content;
+  els.settingsInput.value = JSON.stringify(content, null, 2);
+  renderCategoryEditor();
+  await saveSettings();
+}
+
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[char]));
 }
@@ -589,6 +656,7 @@ async function saveSettings() {
     els.settingsStatusText.textContent = "Incluye categories y socials como listas JSON.";
     return;
   }
+  if (!Array.isArray(content.tabs) || content.tabs.length === 0) content.tabs = structuredClone(DEFAULT_APP_CONTENT.tabs);
   state.appContent = content;
   renderCategoryEditor();
   setBusy(true, "Guardando diseno remoto...");

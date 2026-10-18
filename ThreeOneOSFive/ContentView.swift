@@ -9,39 +9,19 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: tabSelection) {
-            GreegHomeView(onSignOut: onSignOut) {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    tabNavigation.select(AppSection.archivos.rawValue)
-                }
-            }
-            .tabItem { CompactTabLabel(title: "Inicio", systemImage: "house.fill") }
-            .tag(AppSection.home.rawValue)
-
-            GreegPatchLibraryView()
-                .tabItem { CompactTabLabel(title: "Archivos", systemImage: "shippingbox.fill") }
-                .tag(AppSection.archivos.rawValue)
-
-            GreegInstallationView()
-                .tabItem { CompactTabLabel(title: "Instalación", systemImage: "wrench.and.screwdriver.fill") }
-                .tag(AppSection.instalacion.rawValue)
-
-            GreegSocialView()
-                .tabItem { CompactTabLabel(title: "Redes", systemImage: "link.circle.fill") }
-                .tag(AppSection.redes.rawValue)
-
-            ForEach(Array(bottomCategories.enumerated()), id: \.element.id) { offset, category in
-                NexusCategoryTabView(category: category)
-                    .tabItem { CompactTabLabel(title: category.title, systemImage: category.icon, iconURL: category.iconURL) }
-                    .tag(AppSection.redes.rawValue + offset + 1)
+            ForEach(Array(visibleTabs.enumerated()), id: \.element.id) { offset, tab in
+                tabView(for: tab)
+                    .tabItem { CompactTabLabel(title: tab.title, systemImage: tab.icon, iconURL: tab.iconURL) }
+                    .tag(offset)
             }
         }
         .tint(AppTheme.accent)
         .imageScale(.small)
         .onChange(of: patchDraftCoordinator.request?.id) { requestID in
-            if requestID != nil { tabNavigation.select(AppSection.archivos.rawValue) }
+            if requestID != nil, let index = visibleTabs.firstIndex(where: { $0.kind == "files" }) { tabNavigation.select(index) }
         }
         .onChange(of: patchDraftCoordinator.importRequest?.id) { requestID in
-            if requestID != nil { tabNavigation.select(AppSection.archivos.rawValue) }
+            if requestID != nil, let index = visibleTabs.firstIndex(where: { $0.kind == "files" }) { tabNavigation.select(index) }
         }
     }
 
@@ -52,10 +32,31 @@ struct ContentView: View {
         )
     }
 
-    private var bottomCategories: [NexusAppCategory] {
-        remoteContentStore.appContent.categories
-            .filter { $0.parentID == nil }
-            .sorted { $0.sortOrder < $1.sortOrder }
+    private var visibleTabs: [NexusAppTab] {
+        let configured = remoteContentStore.appContent.tabs.filter(\.enabled).sorted { $0.sortOrder < $1.sortOrder }
+        return configured.isEmpty ? NexusAppContent.defaultTabs : configured
+    }
+
+    @ViewBuilder
+    private func tabView(for tab: NexusAppTab) -> some View {
+        switch tab.kind {
+        case "home":
+            GreegHomeView(onSignOut: onSignOut) {
+                if let index = visibleTabs.firstIndex(where: { $0.kind == "files" }) { tabNavigation.select(index) }
+            }
+        case "files":
+            GreegPatchLibraryView()
+        case "installation":
+            GreegInstallationView()
+        case "socials":
+            GreegSocialView()
+        default:
+            if let category = remoteContentStore.appContent.categories.first(where: { $0.id == tab.id }) {
+                NexusCategoryTabView(category: category)
+            } else {
+                EmptyView()
+            }
+        }
     }
 }
 

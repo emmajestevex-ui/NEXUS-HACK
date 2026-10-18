@@ -238,17 +238,55 @@ struct NexusAppSocial: Codable, Identifiable, Equatable {
     }
 }
 
+struct NexusAppTab: Codable, Identifiable, Equatable {
+    let id: String
+    let title: String
+    let icon: String
+    let iconURL: String?
+    let kind: String
+    let enabled: Bool
+    let sortOrder: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, icon, kind, enabled
+        case iconURL = "icon_url"
+        case sortOrder = "sort_order"
+    }
+
+    init(id: String, title: String, icon: String, iconURL: String? = nil, kind: String, enabled: Bool = true, sortOrder: Int) {
+        self.id = id; self.title = title; self.icon = icon; self.iconURL = iconURL; self.kind = kind; self.enabled = enabled; self.sortOrder = sortOrder
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        title = (try? c.decode(String.self, forKey: .title)) ?? "Sección"
+        icon = (try? c.decode(String.self, forKey: .icon)) ?? "square.grid.2x2.fill"
+        iconURL = try? c.decodeIfPresent(String.self, forKey: .iconURL)
+        kind = (try? c.decode(String.self, forKey: .kind)) ?? "category"
+        enabled = (try? c.decode(Bool.self, forKey: .enabled)) ?? true
+        sortOrder = (try? c.decode(Int.self, forKey: .sortOrder)) ?? 0
+    }
+}
+
 struct NexusAppContent: Codable, Equatable {
     let title: String
     let subtitle: String
     let announcement: NexusAppAnnouncement?
     let categories: [NexusAppCategory]
     let socials: [NexusAppSocial]
+    let tabs: [NexusAppTab]
 
-    static let empty = NexusAppContent(title: "NEXUS HACK", subtitle: "Control privado", announcement: nil, categories: [], socials: [])
+    static let defaultTabs = [
+        NexusAppTab(id: "home", title: "Inicio", icon: "house.fill", kind: "home", sortOrder: 0),
+        NexusAppTab(id: "files", title: "Archivos", icon: "shippingbox.fill", kind: "files", sortOrder: 1),
+        NexusAppTab(id: "installation", title: "Instalación", icon: "wrench.and.screwdriver.fill", kind: "installation", sortOrder: 2),
+        NexusAppTab(id: "socials", title: "Redes", icon: "link.circle.fill", kind: "socials", sortOrder: 3)
+    ]
+    static let empty = NexusAppContent(title: "NEXUS HACK", subtitle: "Control privado", announcement: nil, categories: [], socials: [], tabs: defaultTabs)
 
-    init(title: String, subtitle: String, announcement: NexusAppAnnouncement?, categories: [NexusAppCategory], socials: [NexusAppSocial]) {
-        self.title = title; self.subtitle = subtitle; self.announcement = announcement; self.categories = categories; self.socials = socials
+    init(title: String, subtitle: String, announcement: NexusAppAnnouncement?, categories: [NexusAppCategory], socials: [NexusAppSocial], tabs: [NexusAppTab] = defaultTabs) {
+        self.title = title; self.subtitle = subtitle; self.announcement = announcement; self.categories = categories; self.socials = socials; self.tabs = tabs
     }
 
     init(from decoder: Decoder) throws {
@@ -258,9 +296,10 @@ struct NexusAppContent: Codable, Equatable {
         announcement = try? c.decodeIfPresent(NexusAppAnnouncement.self, forKey: .announcement)
         categories = (try? c.decode([NexusAppCategory].self, forKey: .categories)) ?? []
         socials = (try? c.decode([NexusAppSocial].self, forKey: .socials)) ?? []
+        tabs = (try? c.decode([NexusAppTab].self, forKey: .tabs)) ?? NexusAppContent.defaultTabs
     }
 
-    private enum CodingKeys: String, CodingKey { case title, subtitle, announcement, categories, socials }
+    private enum CodingKeys: String, CodingKey { case title, subtitle, announcement, categories, socials, tabs }
 }
 
 struct RemoteContentManifest: Codable, Equatable {

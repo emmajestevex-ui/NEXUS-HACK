@@ -1,7 +1,6 @@
 -- NEXUS HACK - COMPLETE SUPABASE SETUP
 -- Paste this entire file into the Supabase SQL Editor and click Run.
--- Includes licenses, remote files, remote design/categories/socials, admin emails,
--- duplicate target routes, thumbnails and final license RPC refresh.
+-- Includes licenses, remote files, categories, tabs, icons, admin emails and RPC refresh.
 -- This script does not contain a service-role key.
 
 
@@ -945,6 +944,12 @@ values (
       "subtitle": "Control privado",
       "announcement": {"title": "Centro NEXUS", "body": "Sincroniza para recibir las novedades.", "icon": "sparkles", "color": "blue"},
       "categories": [],
+      "tabs": [
+        {"id": "home", "title": "Inicio", "icon": "house.fill", "kind": "home", "enabled": true, "sort_order": 0},
+        {"id": "files", "title": "Archivos", "icon": "shippingbox.fill", "kind": "files", "enabled": true, "sort_order": 1},
+        {"id": "installation", "title": "Instalacion", "icon": "wrench.and.screwdriver.fill", "kind": "installation", "enabled": true, "sort_order": 2},
+        {"id": "socials", "title": "Redes", "icon": "link.circle.fill", "kind": "socials", "enabled": true, "sort_order": 3}
+      ],
       "socials": [
         {"title": "Discord", "subtitle": "Comunidad NEXUS HACK", "url": "https://discord.gg/9NUBpqNGQ", "icon": "bubble.left.and.bubble.right.fill", "color": "blue"},
         {"title": "TikTok", "subtitle": "@tumbado_sensi7", "url": "https://www.tiktok.com/@tumbado_sensi7", "icon": "music.note", "color": "black"}

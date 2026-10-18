@@ -207,6 +207,10 @@ h3 {
   border-radius: 8px;
 }
 
+.tabDisabled {
+  opacity: 0.58;
+}
+
 .categoryEditorIcon {
   width: 42px;
   height: 42px;
