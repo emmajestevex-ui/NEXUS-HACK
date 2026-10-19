@@ -100,7 +100,13 @@ struct ContentView: View {
                 if let index = visibleTabs.firstIndex(where: { $0.kind == "files" }) { tabNavigation.select(index) }
             }
         case "files":
-            GreegPatchLibraryView()
+            if let filesRoot = remoteContentStore.appContent.categories.first(where: {
+                $0.parentID == nil && ($0.id.caseInsensitiveCompare("files") == .orderedSame || $0.title.caseInsensitiveCompare("Archivos") == .orderedSame)
+            }) {
+                NexusCategoryTabView(category: filesRoot)
+            } else {
+                GreegPatchLibraryView()
+            }
         case "installation":
             GreegInstallationView()
         case "socials":
@@ -485,7 +491,6 @@ private struct NexusCategoryTabView: View {
         guard !category.isContainerCategory && childCategories.isEmpty else { return [] }
         return remoteContentStore.installedFiles.filter {
             $0.category.caseInsensitiveCompare(category.id) == .orderedSame
-                || $0.category.caseInsensitiveCompare(category.title) == .orderedSame
         }
     }
 
@@ -968,7 +973,6 @@ private struct GreegHomeView: View {
                     ForEach(categories) { category in
                         let files = remoteContentStore.installedFiles.filter { file in
                             file.category.caseInsensitiveCompare(category.id) == .orderedSame
-                                || file.category.caseInsensitiveCompare(category.title) == .orderedSame
                         }
                         GreegPanel {
                             HStack(spacing: 12) {
@@ -1061,8 +1065,19 @@ private struct RemoteSocialRow: View {
 }
 
 private struct RemoteFileMiniRow: View {
+    @State private var isWorking = false
+    @State private var actionAlert: GreegPatchActionAlert?
     let file: RemoteContentFile
     let tint: Color
+
+    private var projectID: UUID? {
+        UUID(uuidString: file.id)
+    }
+
+    private var isApplied: Bool {
+        guard let projectID else { return false }
+        return DevicePatchService.latestReceipt(projectID: projectID) != nil
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -1078,10 +1093,138 @@ private struct RemoteFileMiniRow: View {
                 }
             }
             Spacer()
-            Image(systemName: file.isTextContent ? "doc.text.fill" : "checkmark.circle.fill")
-                .foregroundStyle(tint)
+            if file.isTextContent {
+                Image(systemName: "doc.text.fill")
+                    .foregroundStyle(tint)
+            } else {
+                Button(action: togglePatch) {
+                    HStack(spacing: 5) {
+                        if isWorking {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: isApplied ? "arrow.uturn.backward.circle.fill" : "checkmark.circle.fill")
+                        }
+                        Text(isApplied ? "Original" : "Aplicar")
+                    }
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 7)
+                    .background((isApplied ? NexusTheme.success : tint).opacity(0.9), in: Capsule())
+                    .scaleEffect(isWorking ? 0.94 : 1)
+                    .animation(.spring(response: 0.25, dampingFraction: 0.72), value: isWorking)
+                }
+                .buttonStyle(NexusPressStyle())
+                .disabled(isWorking)
+            }
         }
         .padding(.vertical, 2)
+        .alert(item: $actionAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+    }
+
+    private func togglePatch() {
+        if isApplied {
+            restore()
+        } else {
+            apply()
+        }
+    }
+
+    private func apply() {
+        guard let projectID else {
+            actionAlert = GreegPatchActionAlert(title: "No se pudo aplicar", message: "Este archivo remoto no tiene un identificador válido.")
+            return
+        }
+        guard let targetPath = file.targetPath?.trimmingCharacters(in: .whitespacesAndNewlines), !targetPath.isEmpty else {
+            actionAlert = GreegPatchActionAlert(title: "Ruta faltante", message: "Este patch no tiene una ruta de destino configurada.")
+            return
+        }
+        guard let localURL = RemoteContentLibrary.localFileURL(for: file),
+              let replacementData = try? Data(contentsOf: localURL) else {
+            actionAlert = GreegPatchActionAlert(title: "Sincroniza primero", message: "Pulsa Sincronizar para descargar este patch antes de aplicarlo.")
+            return
+        }
+
+        let project = PatchProject(
+            id: projectID,
+            name: file.name,
+            author: "NEXUS HACK [REMOTE]",
+            bundleIdentifiers: [file.targetBundleID],
+            rules: [PatchRule(
+                bundleID: file.targetBundleID,
+                relativePath: targetPath,
+                replacementFilename: file.fileName,
+                replacementData: replacementData
+            )]
+        )
+
+        isWorking = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                _ = try DevicePatchService.apply(project: project)
+                await MainActor.run {
+                    isWorking = false
+                    NexusHaptics.notification(.success)
+                    actionAlert = GreegPatchActionAlert(title: "Patch aplicado", message: "El patch está activo. Pulsa Original para restaurar el archivo anterior.")
+                }
+            } catch let error as PatchPackageError {
+                await MainActor.run {
+                    isWorking = false
+                    actionAlert = GreegPatchActionAlert(title: "No se pudo aplicar", message: remotePatchErrorMessage(error))
+                }
+            } catch {
+                await MainActor.run {
+                    isWorking = false
+                    actionAlert = GreegPatchActionAlert(title: "No se pudo aplicar", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func restore() {
+        guard let projectID,
+              let receipt = DevicePatchService.latestReceipt(projectID: projectID) else { return }
+        isWorking = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                try DevicePatchService.restore(receipt: receipt, allowChangedTargets: true)
+                await MainActor.run {
+                    isWorking = false
+                    NexusHaptics.notification(.success)
+                    actionAlert = GreegPatchActionAlert(title: "Original restaurado", message: "El archivo volvió a su estado original.")
+                }
+            } catch let error as PatchPackageError {
+                await MainActor.run {
+                    isWorking = false
+                    actionAlert = GreegPatchActionAlert(title: "No se pudo restaurar", message: remotePatchErrorMessage(error))
+                }
+            } catch {
+                await MainActor.run {
+                    isWorking = false
+                    actionAlert = GreegPatchActionAlert(title: "No se pudo restaurar", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+}
+
+private func remotePatchErrorMessage(_ error: PatchPackageError) -> String {
+    switch error {
+    case .targetAppUnavailable(let bundleID):
+        return "La app destino no está instalada o no se puede abrir: \(bundleID)."
+    case .projectAlreadyApplied:
+        return "Este patch ya está activo. Pulsa Original para volver atrás."
+    case .targetOccupied(let path):
+        return "El destino ya está ocupado por otro patch: \(path)."
+    default:
+        return error.localizedDescription
     }
 }
 
@@ -1396,8 +1539,7 @@ private struct GreegPatchKind: Hashable, Identifiable {
     init(project: PatchProject?) {
         let author = project?.author.lowercased() ?? ""
         let category = Self.metadataValue("greeg_category", in: author)
-        let style = Self.style(author: author, category: category, name: project?.name ?? "")
-        self.init(style: style, category: category)
+        self.init(style: .category, category: category ?? "files")
     }
 
     private init(style: GreegPatchStyle, category: String?) {

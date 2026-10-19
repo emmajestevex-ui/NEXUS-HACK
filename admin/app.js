@@ -170,7 +170,6 @@ const els = {
   slugInput: $("#slugInput"),
   categoryInput: $("#categoryInput"),
   categoryTypeHint: $("#categoryTypeHint"),
-  styleInput: $("#styleInput"),
   targetBundleInput: $("#targetBundleInput"),
   assetVariantLabel: $("#assetVariantLabel"),
   assetVariantInput: $("#assetVariantInput"),
@@ -290,10 +289,6 @@ function bindEvents() {
     els.slugInput.value = safeSlug(els.slugInput.value);
   });
   els.categoryInput.addEventListener("change", updateCategoryTypeUI);
-  els.styleInput.addEventListener("change", () => {
-    els.categoryInput.value = categoryForStyle(els.styleInput.value, els.categoryInput.value);
-    updateCategoryTypeUI();
-  });
   els.targetBundleInput.addEventListener("change", syncAssetVariantWithTargetBundle);
   els.assetVariantInput.addEventListener("change", () => {
     applyAssetVariant(els.assetVariantInput.value);
@@ -918,10 +913,10 @@ async function saveFile(event) {
     if (uploadError) throw uploadError;
     uploadedPath = storagePath;
 
-    let thumbnailPath = thumbnailMarkerFromDescription(els.descriptionInput.value);
+    let thumbnailPath = els.descriptionInput.dataset.thumbnailPath || thumbnailMarkerFromDescription(els.descriptionInput.value);
     const thumbnail = els.thumbnailInput.files?.[0];
     if (thumbnail) {
-      thumbnailPath = `content/thumbnails/${crypto.randomUUID()}.${safeStorageFileName(thumbnail.name).split(".").pop() || "jpg"}`;
+        thumbnailPath = `content/thumbnails/${crypto.randomUUID()}.${safeStorageFileName(thumbnail.name).split(".").pop() || "jpg"}`;
       const { error: thumbnailError } = await supabaseClient.storage
         .from(BUCKET)
         .upload(thumbnailPath, thumbnail, {
@@ -941,9 +936,7 @@ async function saveFile(event) {
       p_category: selectedCategory.id,
       p_target_bundle: targetBundle,
       p_target_path: targetPath,
-      p_description: contentType === "text"
-        ? withThumbnailMarker(els.descriptionInput.value, thumbnailPath)
-        : withStyleMarker(withThumbnailMarker(els.descriptionInput.value, thumbnailPath), els.styleInput.value),
+      p_description: withThumbnailMarker(els.descriptionInput.value, thumbnailPath),
       p_file_name: file.name,
       p_mime_type: file.type || "application/octet-stream",
       p_byte_size: file.size,
@@ -1067,11 +1060,9 @@ async function disablePreset(preset) {
 
 async function publishChanges() {
   if (!state.session || state.busy) return;
-  setBusy(true, "Corrigiendo categorias...");
+  setBusy(true, "Publicando manifest...");
   try {
     const removableStoragePaths = storagePathsSafeToRemove(state.files);
-    await normalizeStyleCategories();
-    setStatus("Publicando manifest...");
     const { data, error } = await supabaseClient.rpc("admin_publish_remote_content");
 
     if (error) {
@@ -1106,13 +1097,14 @@ function editFile(file) {
   els.slugInput.value = file.slug;
   els.slugInput.dataset.touched = "true";
   els.categoryInput.value = file.category || "files";
-  els.styleInput.value = styleFromDescription(file.description);
   els.targetBundleInput.value = safeTargetBundle(file.target_bundle);
   els.targetPathInput.value = file.target_path || fallbackTargetPath(file);
   els.targetPathInput.dataset.touched = "true";
   updateAssetVariantVisibility();
   els.descriptionInput.value = cleanDescription(file.description);
+  els.descriptionInput.dataset.thumbnailPath = thumbnailMarkerFromDescription(file.description);
   els.fileInput.value = "";
+  els.thumbnailInput.value = "";
   els.textContentInput.value = file.text_content || "";
   updateCategoryTypeUI();
   els.saveButton.textContent = "Reemplazar archivo";
@@ -1127,7 +1119,7 @@ function resetForm() {
   delete els.targetPathInput.dataset.touched;
   els.categoryInput.value = "files";
   els.textContentInput.value = "";
-  els.styleInput.value = "antena";
+  delete els.descriptionInput.dataset.thumbnailPath;
   els.targetBundleInput.value = DEFAULT_TARGET_BUNDLE;
   els.targetPathInput.value = "";
   updateCategoryTypeUI();
@@ -1146,7 +1138,6 @@ function applyPreset(preset, selectedRule = null) {
   els.slugInput.value = rule.slug;
   els.slugInput.dataset.touched = "true";
   els.categoryInput.value = rule.category || preset.category || "patches";
-  els.styleInput.value = styleForName(preset.name);
   els.targetBundleInput.value = ruleTargetBundle(preset, rule);
   els.targetPathInput.value = safeRelativePath(rule.targetPath);
   els.targetPathInput.dataset.touched = "true";
@@ -1373,11 +1364,6 @@ function renderFileCard(file) {
   ].join(" / ");
   node.querySelector(".filePath").textContent = `Ruta: ${file.target_path || fallbackTargetPath(file)}`;
   node.querySelector(".fileHash").textContent = file.sha256;
-  const style = styleFromDescription(file.description, file.name);
-  const styleBadge = node.querySelector(".styleBadge");
-  styleBadge.textContent = PATCH_STYLES[style].label;
-  styleBadge.classList.add(PATCH_STYLES[style].className);
-
   const badge = node.querySelector(".badge");
   badge.textContent = badgeLabel(file);
   badge.classList.toggle("pending", file.sync_state !== "published");
