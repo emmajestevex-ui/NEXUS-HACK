@@ -4,7 +4,7 @@ const SUPABASE_URL = "https://oxtyyazqagmfhkgprpsp.supabase.co";
 const SUPABASE_KEY = "sb_publishable_IEtNXoVHdutPKd4g_ej0MA_IF-yXUR8";
 const BUCKET = "nexus-hack-content";
 const UI_BUCKET = "nexus-hack-ui";
-const SCRIPT_VERSION = "20261005-ios27-install";
+const SCRIPT_VERSION = "20261019-3105-import";
 const DEFAULT_TARGET_BUNDLE = "com.dts.freefireth";
 const FREE_FIRE_MAX_BUNDLE = "com.dts.freefiremax";
 const ASSET_INDEXER_DIRECTORY = "Documents/contentcache/Compulsory/ios/gameassetbundles/avatar";
@@ -175,6 +175,8 @@ const els = {
   assetVariantInput: $("#assetVariantInput"),
   targetPathInput: $("#targetPathInput"),
   descriptionInput: $("#descriptionInput"),
+  packageModeLabel: $("#packageModeLabel"),
+  importedPackageInput: $("#importedPackageInput"),
   thumbnailInput: $("#thumbnailInput"),
   textContentLabel: $("#textContentLabel"),
   textContentInput: $("#textContentInput"),
@@ -283,12 +285,15 @@ function bindEvents() {
     if (!els.editingId.value && !els.slugInput.dataset.touched) {
       els.slugInput.value = safeSlug(els.nameInput.value);
     }
+    suggestTargetPath();
   });
   els.slugInput.addEventListener("input", () => {
     els.slugInput.dataset.touched = "true";
     els.slugInput.value = safeSlug(els.slugInput.value);
+    suggestTargetPath();
   });
   els.categoryInput.addEventListener("change", updateCategoryTypeUI);
+  els.importedPackageInput.addEventListener("change", updatePackageMode);
   els.targetBundleInput.addEventListener("change", syncAssetVariantWithTargetBundle);
   els.assetVariantInput.addEventListener("change", () => {
     applyAssetVariant(els.assetVariantInput.value);
@@ -594,10 +599,31 @@ function updateCategoryTypeUI() {
   els.fileUploadLabel.classList.toggle("hidden", isContainer);
   els.fileUploadLabel.querySelector(".fieldHint").textContent = isText
     ? "Opcional. Si no subes archivo, se generará un documento de texto automáticamente."
-    : "Obligatorio para categorías tipo patch.";
+    : els.importedPackageInput.checked
+      ? "Selecciona el archivo .3105 ya exportado. Se conservará completo."
+      : "Obligatorio para categorías tipo patch.";
   els.fileInput.required = !isText && !isContainer;
   if (!isText) els.textContentInput.value = "";
+  if (isText || isContainer) els.importedPackageInput.checked = false;
+  els.packageModeLabel.classList.toggle("hidden", isText || isContainer);
+  updatePackageMode();
   suggestTargetPath();
+}
+
+function updatePackageMode() {
+  const packageMode = Boolean(els.importedPackageInput.checked);
+  const category = categoryById(els.categoryInput.value) || allCategoryChoices().find((item) => item.id === els.categoryInput.value);
+  const allowed = categoryContentType(category) === "patch";
+  els.importedPackageInput.disabled = !allowed;
+  els.packageModeLabel.classList.toggle("hidden", !allowed);
+  els.fileInput.accept = packageMode ? ".3105,application/vnd.greeg.3105,application/octet-stream" : "";
+  els.targetPathInput.placeholder = packageMode ? "packages/mi-patch/mi-patch.3105" : "patches/mi-patch.bundle";
+  if (packageMode) {
+    els.assetVariantLabel.classList.add("hidden");
+    els.categoryTypeHint.textContent = `${categoryPath(els.categoryInput.value, allCategoryChoices())} · Paquete .3105 exportado`;
+  } else {
+    updateAssetVariantVisibility();
+  }
 }
 
 function renderCategoryEditor() {
@@ -893,6 +919,7 @@ async function saveFile(event) {
     return;
   }
   const textBody = els.textContentInput.value.trim();
+  const packageMode = contentType === "patch" && els.importedPackageInput.checked;
   let file = els.fileInput.files?.[0] || null;
   if (contentType === "text") {
     if (!textBody) {
@@ -905,12 +932,20 @@ async function saveFile(event) {
     setStatus("Selecciona un archivo para esta categoría tipo patch.");
     return;
   }
+  if (packageMode && !is3105File(file)) {
+    setStatus("El modo paquete necesita un archivo .3105 exportado desde 3105.");
+    return;
+  }
 
-  const selectedAssetVariant = els.assetVariantLabel.classList.contains("hidden")
+  const selectedAssetVariant = packageMode || els.assetVariantLabel.classList.contains("hidden")
     ? null
     : ASSET_VARIANTS[els.assetVariantInput.value];
   const targetBundle = safeTargetBundle(selectedAssetVariant?.targetBundle || els.targetBundleInput.value);
-  const targetPath = safeRelativePath(selectedAssetVariant?.targetPath || els.targetPathInput.value || `${contentType === "text" ? "text" : selectedCategory.id}/${file.name}`);
+  const targetPath = safeRelativePath(
+    selectedAssetVariant?.targetPath
+      || els.targetPathInput.value
+      || (packageMode ? `packages/${slug || "patch"}/${file.name}` : `${contentType === "text" ? "text" : selectedCategory.id}/${file.name}`)
+  );
   if (!name || !slug) {
     setStatus("Completa nombre y slug.");
     return;
@@ -975,7 +1010,7 @@ async function saveFile(event) {
       p_target_path: targetPath,
       p_description: withThumbnailMarker(els.descriptionInput.value, thumbnailPath),
       p_file_name: file.name,
-      p_mime_type: file.type || "application/octet-stream",
+      p_mime_type: packageMode ? "application/vnd.greeg.3105" : (file.type || "application/octet-stream"),
       p_byte_size: file.size,
       p_sha256: hash,
       p_storage_path: storagePath,
@@ -1140,6 +1175,8 @@ function editFile(file) {
   updateAssetVariantVisibility();
   els.descriptionInput.value = cleanDescription(file.description);
   els.descriptionInput.dataset.thumbnailPath = thumbnailMarkerFromDescription(file.description);
+  els.importedPackageInput.checked = String(file.file_name || "").toLowerCase().endsWith(".3105")
+    || String(file.mime_type || "").toLowerCase() === "application/vnd.greeg.3105";
   els.fileInput.value = "";
   els.thumbnailInput.value = "";
   els.textContentInput.value = file.text_content || "";
@@ -1155,6 +1192,7 @@ function resetForm() {
   delete els.slugInput.dataset.touched;
   delete els.targetPathInput.dataset.touched;
   els.categoryInput.value = "files";
+  els.importedPackageInput.checked = false;
   els.textContentInput.value = "";
   delete els.descriptionInput.dataset.thumbnailPath;
   els.targetBundleInput.value = DEFAULT_TARGET_BUNDLE;
@@ -1183,6 +1221,7 @@ function applyPreset(preset, selectedRule = null) {
   }
   updateAssetVariantVisibility();
   els.descriptionInput.value = cleanDescription(rule.description || preset.description || "");
+  els.importedPackageInput.checked = false;
   els.fileInput.value = "";
   els.saveButton.textContent = "Crear patch nuevo";
   els.fileInput.focus();
@@ -1190,11 +1229,22 @@ function applyPreset(preset, selectedRule = null) {
 }
 
 function suggestTargetPath() {
-  if (els.editingId.value || els.targetPathInput.dataset.touched) return;
   const file = els.fileInput.files?.[0];
+  if (file && is3105File(file)) {
+    els.importedPackageInput.checked = true;
+    updatePackageMode();
+  }
+  if (els.editingId.value || els.targetPathInput.dataset.touched) return;
   if (!file) return;
-  els.targetPathInput.value = safeRelativePath(`${els.categoryInput.value || "files"}/${file.name}`);
-  updateAssetVariantVisibility();
+  const relativePath = els.importedPackageInput.checked
+    ? `packages/${els.slugInput.value || "patch"}/${file.name}`
+    : `${els.categoryInput.value || "files"}/${file.name}`;
+  els.targetPathInput.value = safeRelativePath(relativePath);
+  if (els.importedPackageInput.checked) {
+    els.assetVariantLabel.classList.add("hidden");
+  } else {
+    updateAssetVariantVisibility();
+  }
 }
 
 function applyAssetVariant(value) {
@@ -1393,7 +1443,7 @@ function renderFileCard(file) {
   node.querySelector("h3").textContent = file.name;
   node.querySelector(".fileMeta").textContent = [
     categoryPath(file.category || "files", allCategoryChoices()),
-    file.content_type === "text" ? "Texto" : "Patch",
+    file.content_type === "text" ? "Texto" : (String(file.file_name || "").toLowerCase().endsWith(".3105") ? "Paquete .3105" : "Patch"),
     `v${file.version}`,
     file.target_bundle || DEFAULT_TARGET_BUNDLE,
     file.file_name,
@@ -1772,6 +1822,12 @@ function safeFileName(value) {
 
 function safeStorageFileName(value) {
   return "upload.bin";
+}
+
+function is3105File(file) {
+  const name = String(file?.name || "").trim().toLowerCase();
+  const type = String(file?.type || "").trim().toLowerCase();
+  return name.endsWith(".3105") || type === "application/vnd.greeg.3105";
 }
 
 function formatBytes(value) {

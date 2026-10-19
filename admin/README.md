@@ -10,8 +10,9 @@ Panel estatico para administrar contenido remoto propio de NEXUS HACK desde una 
 4. Abre `admin/index.html` en el navegador o sube la carpeta `admin/` a un hosting privado.
 5. Entra con tu correo y contrasena de Supabase. Si todavia no tienes acceso, escribe uno de los correos admin, pon una contrasena nueva y pulsa `Crear acceso`.
 6. Sube o reemplaza archivos y pulsa `Publicar cambios`.
-7. En `Diseno remoto` edita el JSON para agregar categorias o subcategorias (`parent_id`), anuncios, iconos, colores `blue`, `gray` o `black`, y redes. Guarda el diseno y despues pulsa `Publicar cambios`; la app lo recibe al sincronizar sin una IPA nueva.
-8. Al crear un patch puedes adjuntar una imagen pequena. El panel la guarda en Storage y la app la muestra junto al nombre.
+7. Para publicar un patch ya creado en la app, activa `Ya exportado como paquete .3105`, selecciona el archivo `.3105`, elige la categoría y publica. El paquete se conserva completo y el iPhone lo importa sin convertirlo.
+8. En `Diseno remoto` edita el JSON para agregar categorias o subcategorias (`parent_id`), anuncios, iconos, colores `blue`, `gray` o `black`, y redes. Guarda el diseno y despues pulsa `Publicar cambios`; la app lo recibe al sincronizar sin una IPA nueva.
+9. Al crear un patch puedes adjuntar una imagen pequena. El panel la guarda en Storage y la app la muestra junto al nombre.
 
 En Windows tambien puedes abrir `admin/start-panel.cmd`; eso levanta el panel en `http://127.0.0.1:8787/` para evitar problemas del navegador con `file://`.
 
@@ -24,6 +25,8 @@ En Windows tambien puedes abrir `admin/start-panel.cmd`; eso levanta el panel en
 5. Pulsa `Publicar cambios`.
 
 Para editar uno ya publicado, pulsa `Reemplazar` en la tarjeta del patch o vuelve a tocar la misma plantilla. Algunos patches, como `Aimbot Drag FF Max`, tienen dos reglas dentro del mismo patch; toca la regla que quieres reemplazar, por ejemplo `Assembly-CSharp-patch.bytes` o `localConfig.json`. Si usas la misma combinacion de `App destino` y `Ruta en NEXUS HACK`, el iPhone descarga solo el archivo cambiado y reemplaza esa copia local despues de verificar el SHA-256.
+
+Los paquetes `.3105` ya exportados no necesitan ruta interna de reemplazo: el panel les asigna una ruta técnica de almacenamiento y la app usa la información que ya está dentro del paquete.
 
 Para quitar un patch integrado, pulsa `Quitar` en su plantilla y despues `Publicar cambios`. La app lo oculta despues de buscar actualizaciones. Para traerlo de vuelta, vuelve a tocar la plantilla, sube un archivo nuevo y publica.
 

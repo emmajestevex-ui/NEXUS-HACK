@@ -150,6 +150,33 @@ h3 {
   gap: 14px;
 }
 
+.packageModeLabel {
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  background: rgba(47, 143, 255, 0.08);
+  border: 1px solid rgba(105, 178, 255, 0.28);
+  border-radius: 8px;
+}
+
+.packageModeTitle {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.packageModeRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 750;
+}
+
+.packageModeRow input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
 .settingsEditor {
   width: 100%;
   min-height: 320px;

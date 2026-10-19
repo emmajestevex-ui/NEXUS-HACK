@@ -103,6 +103,14 @@
               Descripcion
               <textarea id="descriptionInput" rows="3" placeholder="Nota interna opcional"></textarea>
             </label>
+            <label id="packageModeLabel" class="packageModeLabel">
+              <span class="packageModeTitle">Formato del archivo</span>
+              <span class="packageModeRow">
+                <input id="importedPackageInput" type="checkbox" />
+                <span>Ya exportado como paquete .3105</span>
+              </span>
+              <span class="fieldHint">Actívalo para subir un patch que ya fue creado/exportado desde 3105. El iPhone lo importará completo, sin convertirlo.</span>
+            </label>
             <label>
               Imagen pequena del patch (opcional)
               <input id="thumbnailInput" type="file" accept="image/*" />
@@ -297,6 +305,6 @@
       </article>
     </template>
 
-    <script type="module" src="./app.js?v=20261005-ios27-install"></script>
+    <script type="module" src="./app.js?v=20261019-3105-import"></script>
   </body>
 </html>
