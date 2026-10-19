@@ -1080,16 +1080,16 @@ private struct RemoteFileMiniRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             RemoteFileArtwork(file: file, tint: tint)
             VStack(alignment: .leading, spacing: 2) {
-                Text(file.name).font(.subheadline.weight(.bold)).lineLimit(1)
+                Text(file.name).font(.headline.weight(.bold)).lineLimit(1)
                 if file.isTextContent, let textContent = file.textContent?.trimmingCharacters(in: .whitespacesAndNewlines), !textContent.isEmpty {
                     Text(textContent)
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                 } else {
                     Text(file.description?.nexusCleanDescription ?? "Disponible después de sincronizar")
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                 }
             }
             Spacer()
@@ -1107,10 +1107,10 @@ private struct RemoteFileMiniRow: View {
                         }
                         Text(isApplied ? "Original" : "Aplicar")
                     }
-                    .font(.caption2.weight(.black))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 8)
                     .background((isApplied ? NexusTheme.success : tint).opacity(0.9), in: Capsule())
                     .scaleEffect(isWorking ? 0.94 : 1)
                     .animation(.spring(response: 0.25, dampingFraction: 0.72), value: isWorking)
@@ -1119,7 +1119,7 @@ private struct RemoteFileMiniRow: View {
                 .disabled(isWorking)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 5)
         .alert(item: $actionAlert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -1238,24 +1238,30 @@ private struct RemoteFileArtwork: View {
         Group {
             if let url = file.nexusThumbnailURL {
                 AsyncImage(url: url) { phase in
-                    if let image = phase.image { image.resizable().scaledToFit().padding(4) }
+                    if let image = phase.image {
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(6)
+                    }
                     else { fallback }
                 }
             } else if file.isTextContent {
                 Image(systemName: "doc.text.fill")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(tint)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else { fallback }
         }
-        .frame(width: 38, height: 38)
+        .frame(width: 52, height: 52)
         .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var fallback: some View {
         Image(systemName: "shippingbox.fill")
-            .font(.system(size: 16, weight: .bold))
+            .font(.system(size: 20, weight: .bold))
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
