@@ -604,7 +604,7 @@ private struct NexusRemoteArtwork: View {
             if let iconURL, let url = URL(string: iconURL) {
                 AsyncImage(url: url, transaction: Transaction(animation: .easeInOut(duration: 0.2))) { phase in
                     if let image = phase.image {
-                        image.resizable().scaledToFill()
+                        image.resizable().scaledToFit()
                     } else {
                         Image(systemName: systemName)
                             .font(.system(size: size * 0.38, weight: .semibold))
@@ -1172,6 +1172,7 @@ private struct RemoteFileMiniRow: View {
                 await MainActor.run {
                     isWorking = false
                     NexusHaptics.notification(.success)
+                    NexusAudioPlayer.shared.play(named: "nexus_apply")
                     actionAlert = GreegPatchActionAlert(title: "Patch aplicado", message: "El patch está activo. Pulsa Original para restaurar el archivo anterior.")
                 }
             } catch let error as PatchPackageError {
@@ -1198,6 +1199,7 @@ private struct RemoteFileMiniRow: View {
                 await MainActor.run {
                     isWorking = false
                     NexusHaptics.notification(.success)
+                    NexusAudioPlayer.shared.play(named: "nexus_original")
                     actionAlert = GreegPatchActionAlert(title: "Original restaurado", message: "El archivo volvió a su estado original.")
                 }
             } catch let error as PatchPackageError {
@@ -1236,7 +1238,7 @@ private struct RemoteFileArtwork: View {
         Group {
             if let url = file.nexusThumbnailURL {
                 AsyncImage(url: url) { phase in
-                    if let image = phase.image { image.resizable().scaledToFill() }
+                    if let image = phase.image { image.resizable().scaledToFit().padding(4) }
                     else { fallback }
                 }
             } else if file.isTextContent {
@@ -1743,6 +1745,7 @@ private struct GreegPatchRow: View {
                 await MainActor.run {
                     store.reload()
                     isWorking = false
+                    NexusAudioPlayer.shared.play(named: "nexus_apply")
                     actionAlert = GreegPatchActionAlert(title: "Activado", message: "El patch está activo. Puedes tocar el check nuevamente para restaurar el original.")
                 }
             } catch {
@@ -1763,6 +1766,7 @@ private struct GreegPatchRow: View {
                 await MainActor.run {
                     store.reload()
                     isWorking = false
+                    NexusAudioPlayer.shared.play(named: "nexus_original")
                     actionAlert = GreegPatchActionAlert(title: "Original restaurado", message: "El archivo volvió a su estado original.")
                 }
             } catch {
@@ -1932,6 +1936,7 @@ private struct GreegPatchDetailView: View {
                 await MainActor.run {
                     store.reload()
                     isWorking = false
+                    NexusAudioPlayer.shared.play(named: "nexus_apply")
                     actionAlert = GreegPatchActionAlert(title: "Listo", message: "Archivo aplicado correctamente.")
                 }
             } catch let error as PatchPackageError {
@@ -1957,6 +1962,7 @@ private struct GreegPatchDetailView: View {
                 await MainActor.run {
                     store.reload()
                     isWorking = false
+                    NexusAudioPlayer.shared.play(named: "nexus_original")
                     actionAlert = GreegPatchActionAlert(title: "Listo", message: "Archivo original restaurado.")
                 }
             } catch let error as PatchPackageError {

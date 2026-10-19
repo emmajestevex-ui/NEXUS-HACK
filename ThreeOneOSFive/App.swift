@@ -2,6 +2,43 @@ import SwiftUI
 import UIKit
 import Security
 import Combine
+import AVFoundation
+
+final class NexusAudioPlayer: NSObject, AVAudioPlayerDelegate {
+    static let shared = NexusAudioPlayer()
+
+    private var player: AVAudioPlayer?
+
+    @discardableResult
+    func play(named resourceName: String) -> TimeInterval? {
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "mp3") else {
+            log("audio: missing bundled resource \(resourceName).mp3")
+            return nil
+        }
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setActive(true, options: [])
+
+            player?.stop()
+            let nextPlayer = try AVAudioPlayer(contentsOf: url)
+            nextPlayer.delegate = self
+            nextPlayer.prepareToPlay()
+            player = nextPlayer
+            nextPlayer.play()
+            return nextPlayer.duration
+        } catch {
+            log("audio: could not play \(resourceName).mp3 — \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func stop() {
+        player?.stop()
+        player = nil
+    }
+}
 
 @main
 struct ThreeOneOSFiveApp: App {
@@ -363,6 +400,7 @@ private struct NexusLaunchExperience: View {
             }
         }
         .onAppear {
+            NexusAudioPlayer.shared.play(named: "nexus_intro")
             withAnimation(reduceMotion ? nil : .spring(response: 0.55, dampingFraction: 0.82)) {
                 reveal = true
             }

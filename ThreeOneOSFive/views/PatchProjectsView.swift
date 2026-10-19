@@ -996,6 +996,7 @@ private struct PatchProjectDetailView: View {
                 await MainActor.run {
                     store.reload()
                     isWorking = false
+                    NexusAudioPlayer.shared.play(named: "nexus_apply")
                     actionAlert = PatchStoreAlert(titleKey: "common.done", messageKey: "patch.applied_message")
                 }
             } catch let error as PatchPackageError {
@@ -1078,6 +1079,7 @@ private struct PatchProjectDetailView: View {
                     try DevicePatchService.restore(receipt: receipt)
                     await MainActor.run {
                         isWorking = false
+                        NexusAudioPlayer.shared.play(named: "nexus_original")
                         actionAlert = PatchStoreAlert(
                             titleKey: "common.done",
                             messageKey: "patch.restored_message"
@@ -1122,6 +1124,7 @@ private struct PatchProjectDetailView: View {
                 )
                 await MainActor.run {
                     isWorking = false
+                    NexusAudioPlayer.shared.play(named: "nexus_original")
                     actionAlert = PatchStoreAlert(titleKey: "common.done", messageKey: "patch.restored_message")
                 }
             } catch let error as PatchPackageError {

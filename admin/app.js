@@ -639,6 +639,28 @@ function renderTabEditor() {
   els.tabList.querySelectorAll(".tabToggleButton").forEach((button) => button.addEventListener("click", () => toggleTab(button.dataset.tabId)));
 }
 
+async function normalizeImageForUpload(file) {
+  const supportedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+  if (supportedTypes.has(String(file.type || "").toLowerCase())) return file;
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("No se pudo preparar la imagen");
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close?.();
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("No se pudo convertir la imagen");
+    const baseName = safeStorageFileName(file.name).replace(/\.[^.]+$/, "") || "imagen";
+    return new File([blob], `${baseName}.png`, { type: "image/png" });
+  } catch {
+    throw new Error("No se pudo leer esa imagen. Usa una captura PNG, JPG, WEBP o BMP válida.");
+  }
+}
+
 function openCategoryEditor(id = "") {
   state.editorMode = "category";
   const category = (state.appContent?.categories || []).find((item) => item.id === id);
@@ -707,10 +729,17 @@ async function saveCategoryFromForm(event) {
   let iconURL = content.categories.find((category) => category.id === els.editingCategoryId.value)?.icon_url || null;
   const iconFile = els.categoryIconFileInput.files?.[0];
   if (iconFile) {
+    let uploadIcon;
+    try {
+      uploadIcon = await normalizeImageForUpload(iconFile);
+    } catch (error) {
+      els.settingsStatusText.textContent = error.message;
+      return;
+    }
     // The UI bucket policy only allows objects under ui-icons/.
     // Keep this separate from the content bucket paths used by patches.
-    const iconPath = `ui-icons/${crypto.randomUUID()}.${safeStorageFileName(iconFile.name).split(".").pop() || "png"}`;
-    const { error } = await supabaseClient.storage.from(UI_BUCKET).upload(iconPath, iconFile, { cacheControl: "31536000", contentType: iconFile.type || "image/png", upsert: true });
+    const iconPath = `ui-icons/${crypto.randomUUID()}.${safeStorageFileName(uploadIcon.name).split(".").pop() || "png"}`;
+    const { error } = await supabaseClient.storage.from(UI_BUCKET).upload(iconPath, uploadIcon, { cacheControl: "31536000", contentType: uploadIcon.type || "image/png", upsert: true });
     if (error) { els.settingsStatusText.textContent = adminErrorMessage(error); return; }
     iconURL = `${SUPABASE_URL}/storage/v1/object/public/${UI_BUCKET}/${iconPath}`;
   }
@@ -916,12 +945,18 @@ async function saveFile(event) {
     let thumbnailPath = els.descriptionInput.dataset.thumbnailPath || thumbnailMarkerFromDescription(els.descriptionInput.value);
     const thumbnail = els.thumbnailInput.files?.[0];
     if (thumbnail) {
-        thumbnailPath = `content/thumbnails/${crypto.randomUUID()}.${safeStorageFileName(thumbnail.name).split(".").pop() || "jpg"}`;
+      let uploadThumbnail;
+      try {
+        uploadThumbnail = await normalizeImageForUpload(thumbnail);
+      } catch (error) {
+        throw error;
+      }
+      thumbnailPath = `content/thumbnails/${crypto.randomUUID()}.${safeStorageFileName(uploadThumbnail.name).split(".").pop() || "png"}`;
       const { error: thumbnailError } = await supabaseClient.storage
         .from(BUCKET)
-        .upload(thumbnailPath, thumbnail, {
+        .upload(thumbnailPath, uploadThumbnail, {
           cacheControl: "3600",
-          contentType: thumbnail.type || "image/jpeg",
+          contentType: uploadThumbnail.type || "image/png",
           upsert: true,
         });
       if (thumbnailError) throw thumbnailError;
