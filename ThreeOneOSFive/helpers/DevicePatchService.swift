@@ -8,7 +8,7 @@ enum DevicePatchService {
                 project,
                 roots: roots
             )
-            try PatchTransaction.apply(
+            return try PatchTransaction.apply(
                 project: effectiveProject,
                 backupRoot: try PatchProjectLibrary.backupRootURL(),
                 containerResolver: { bundleID in
