@@ -531,7 +531,10 @@ const BUILTIN_CATEGORY_CHOICES = [
 ];
 
 function categoryContentType(category) {
-  return String(category?.content_type || category?.type || "patch").toLowerCase() === "text" ? "text" : "patch";
+  const value = String(category?.content_type || category?.type || "patch").toLowerCase();
+  const hasChildren = Boolean(category?.id && (state.appContent?.categories || []).some((item) => item.parent_id === category.id));
+  if (hasChildren) return "container";
+  return value === "text" ? "text" : value === "container" ? "container" : "patch";
 }
 
 function categoryById(id) {
@@ -572,11 +575,12 @@ function allCategoryChoices() {
 }
 
 function renderFileCategoryOptions(selectedID = els.categoryInput.value || "files") {
-  const choices = allCategoryChoices();
-  const sorted = [...choices].sort((a, b) => categoryPath(a.id, choices).localeCompare(categoryPath(b.id, choices), "es"));
+  const allChoices = allCategoryChoices();
+  const choices = allChoices.filter((category) => categoryContentType(category) !== "container");
+  const sorted = [...choices].sort((a, b) => categoryPath(a.id, allChoices).localeCompare(categoryPath(b.id, allChoices), "es"));
   els.categoryInput.innerHTML = sorted.map((category) => `
     <option value="${escapeHtml(category.id)}" data-content-type="${categoryContentType(category)}">
-      ${escapeHtml(categoryPath(category.id, choices))} · ${categoryContentType(category) === "text" ? "Texto" : "Patch"}
+      ${escapeHtml(categoryPath(category.id, allCategoryChoices()))} · ${categoryContentType(category) === "text" ? "Texto" : "Patch"}
     </option>
   `).join("");
   els.categoryInput.value = sorted.some((category) => category.id === selectedID) ? selectedID : (sorted[0]?.id || "files");
@@ -587,14 +591,16 @@ function updateCategoryTypeUI() {
   const category = categoryById(els.categoryInput.value) || allCategoryChoices().find((item) => item.id === els.categoryInput.value);
   const type = categoryContentType(category);
   const isText = type === "text";
+  const isContainer = type === "container";
   els.categoryTypeHint.textContent = category
-    ? `${categoryPath(category.id, allCategoryChoices())} · ${isText ? "Texto / tutorial" : "Patch / archivo"}`
+    ? `${categoryPath(category.id, allCategoryChoices())} · ${isContainer ? "Contenedor / solo subcategorías" : isText ? "Texto / tutorial" : "Patch / archivo"}`
     : "Selecciona la sección exacta donde aparecerá.";
   els.textContentLabel.classList.toggle("hidden", !isText);
+  els.fileUploadLabel.classList.toggle("hidden", isContainer);
   els.fileUploadLabel.querySelector(".fieldHint").textContent = isText
     ? "Opcional. Si no subes archivo, se generará un documento de texto automáticamente."
     : "Obligatorio para categorías tipo patch.";
-  els.fileInput.required = !isText;
+  els.fileInput.required = !isText && !isContainer;
   if (!isText) els.textContentInput.value = "";
   suggestTargetPath();
 }
@@ -605,7 +611,10 @@ function renderCategoryEditor() {
   els.categoryParentInput.innerHTML = '<option value="">Sin padre</option>' + categories
     .filter((category) => {
       const editingID = els.editingCategoryId.value;
-      return category.id !== editingID && !categoryDescendants(editingID, categories).has(category.id);
+      const currentParentID = (categories.find((item) => item.id === editingID) || {}).parent_id;
+      return category.id !== editingID
+        && !categoryDescendants(editingID, categories).has(category.id)
+        && (categoryContentType(category) === "container" || category.id === currentParentID);
     })
     .sort((a, b) => categoryPath(a.id, categories).localeCompare(categoryPath(b.id, categories), "es"))
     .map((category) => `<option value="${escapeHtml(category.id)}">${escapeHtml(categoryPath(category.id, categories))}</option>`)
@@ -615,7 +624,7 @@ function renderCategoryEditor() {
   els.categoryList.innerHTML = categories.length ? orderedCategories.map((category) => `
     <article class="categoryEditorCard">
       <div class="categoryEditorIcon"><span class="sfIcon">${escapeHtml(category.icon || "square.grid.2x2.fill")}</span></div>
-      <div class="categoryEditorMain"><strong>${escapeHtml(categoryPath(category.id, categories))}</strong><span>${escapeHtml(category.subtitle || "Sin descripción")}</span><small>${escapeHtml(category.color || "blue")} · ${categoryContentType(category) === "text" ? "Texto" : "Patch"} · orden ${Number(category.sort_order || 0)}</small></div>
+      <div class="categoryEditorMain"><strong>${escapeHtml(categoryPath(category.id, categories))}</strong><span>${escapeHtml(category.subtitle || "Sin descripción")}</span><small>${escapeHtml(category.color || "blue")} · ${categoryContentType(category) === "container" ? "Contenedor" : categoryContentType(category) === "text" ? "Texto" : "Patch"} · orden ${Number(category.sort_order || 0)}</small></div>
       <div class="categoryEditorActions"><button class="ghost categoryEditButton" data-category-id="${escapeHtml(category.id)}" type="button">Editar</button><button class="ghost categoryDeleteButton" data-category-id="${escapeHtml(category.id)}" type="button">Eliminar</button></div>
     </article>`).join("") : '<p class="muted">Todavía no hay categorías. Pulsa Nueva categoría.</p>';
   els.categoryList.querySelectorAll(".categoryEditButton").forEach((button) => button.addEventListener("click", () => openCategoryEditor(button.dataset.categoryId)));
@@ -644,7 +653,8 @@ function openCategoryEditor(id = "") {
   els.categorySubtitleInput.value = category?.subtitle || "";
   els.categoryIconInput.value = category?.icon || "square.grid.2x2.fill";
   els.categoryColorInput.value = category?.color || "blue";
-  els.categoryContentTypeInput.value = categoryContentType(category);
+  const hasChildren = Boolean(category && (state.appContent?.categories || []).some((item) => item.parent_id === category.id));
+  els.categoryContentTypeInput.value = hasChildren ? "container" : categoryContentType(category);
   els.categoryContentTypeInput.closest("label")?.classList.remove("hidden");
   els.categoryParentInput.closest("label")?.classList.remove("hidden");
   els.categoryOrderInput.value = String(category?.sort_order ?? ((state.appContent?.categories || []).length * 10));
@@ -707,7 +717,13 @@ async function saveCategoryFromForm(event) {
     if (error) { els.settingsStatusText.textContent = adminErrorMessage(error); return; }
     iconURL = `${SUPABASE_URL}/storage/v1/object/public/${UI_BUCKET}/${iconPath}`;
   }
-  const item = { id, title: els.categoryNameInput.value.trim(), subtitle: els.categorySubtitleInput.value.trim(), icon: els.categoryIconInput.value.trim() || "square.grid.2x2.fill", icon_url: iconURL, color: els.categoryColorInput.value, content_type: els.categoryContentTypeInput.value === "text" ? "text" : "patch", parent_id: els.categoryParentInput.value || null, sort_order: Number(els.categoryOrderInput.value || 0) };
+  const hasChildren = content.categories.some((category) => category.parent_id === id);
+  const selectedType = els.categoryContentTypeInput.value;
+  const contentType = hasChildren ? "container" : selectedType === "text" ? "text" : selectedType === "container" ? "container" : "patch";
+  const parentID = els.categoryParentInput.value || null;
+  const parent = content.categories.find((category) => category.id === parentID);
+  if (parent) parent.content_type = "container";
+  const item = { id, title: els.categoryNameInput.value.trim(), subtitle: els.categorySubtitleInput.value.trim(), icon: els.categoryIconInput.value.trim() || "square.grid.2x2.fill", icon_url: iconURL, color: els.categoryColorInput.value, content_type: contentType, parent_id: parentID, sort_order: Number(els.categoryOrderInput.value || 0) };
   const index = content.categories.findIndex((category) => category.id === els.editingCategoryId.value);
   if (index >= 0) content.categories[index] = item;
   else content.categories.push(item);
@@ -846,6 +862,10 @@ async function saveFile(event) {
   const slug = safeSlug(els.slugInput.value || name);
   const selectedCategory = categoryById(els.categoryInput.value) || allCategoryChoices().find((item) => item.id === els.categoryInput.value) || { id: els.categoryInput.value || "files", content_type: "patch" };
   const contentType = categoryContentType(selectedCategory);
+  if (contentType === "container") {
+    setStatus("Esta sección es un contenedor. Elige una subcategoría para publicar archivos.");
+    return;
+  }
   const textBody = els.textContentInput.value.trim();
   let file = els.fileInput.files?.[0] || null;
   if (contentType === "text") {

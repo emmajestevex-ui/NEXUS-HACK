@@ -482,6 +482,7 @@ private struct NexusCategoryTabView: View {
     }
 
     private var files: [RemoteContentFile] {
+        guard !category.isContainerCategory && childCategories.isEmpty else { return [] }
         remoteContentStore.installedFiles.filter {
             $0.category.caseInsensitiveCompare(category.id) == .orderedSame
                 || $0.category.caseInsensitiveCompare(category.title) == .orderedSame
@@ -545,7 +546,9 @@ private struct NexusCategoryTabView: View {
                                 NexusRemoteArtwork(systemName: category.icon, iconURL: category.iconURL, tint: nexusCategoryColor(category.color), size: 54)
                                 Text("Sin contenido todavía")
                                     .font(.headline.weight(.bold))
-                                Text("Publica archivos en esta categoría y pulsa Sincronizar.")
+                                Text(category.isContainerCategory
+                                     ? "Crea categorías dentro de esta sección para organizar el contenido."
+                                     : "Publica archivos en esta categoría y pulsa Sincronizar.")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                     .multilineTextAlignment(.center)

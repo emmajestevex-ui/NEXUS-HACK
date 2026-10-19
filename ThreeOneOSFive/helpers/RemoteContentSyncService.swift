@@ -226,7 +226,8 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
         icon = (try? c.decode(String.self, forKey: .icon)) ?? "square.grid.2x2.fill"
         iconURL = try? c.decodeIfPresent(String.self, forKey: .iconURL)
         color = (try? c.decode(String.self, forKey: .color)) ?? "blue"
-        contentType = ((try? c.decode(String.self, forKey: .contentType)) ?? (try? c.decode(String.self, forKey: .legacyType)) ?? "patch").lowercased() == "text" ? "text" : "patch"
+        let rawContentType = ((try? c.decode(String.self, forKey: .contentType)) ?? (try? c.decode(String.self, forKey: .legacyType)) ?? "patch").lowercased()
+        contentType = rawContentType == "text" ? "text" : (rawContentType == "container" ? "container" : "patch")
         parentID = try? c.decodeIfPresent(String.self, forKey: .parentID)
         sortOrder = (try? c.decode(Int.self, forKey: .sortOrder)) ?? 0
     }
@@ -246,6 +247,10 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
 
     var isTextCategory: Bool {
         contentType == "text"
+    }
+
+    var isContainerCategory: Bool {
+        contentType == "container"
     }
 }
 
