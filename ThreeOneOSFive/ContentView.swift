@@ -483,7 +483,7 @@ private struct NexusCategoryTabView: View {
 
     private var files: [RemoteContentFile] {
         guard !category.isContainerCategory && childCategories.isEmpty else { return [] }
-        remoteContentStore.installedFiles.filter {
+        return remoteContentStore.installedFiles.filter {
             $0.category.caseInsensitiveCompare(category.id) == .orderedSame
                 || $0.category.caseInsensitiveCompare(category.title) == .orderedSame
         }
