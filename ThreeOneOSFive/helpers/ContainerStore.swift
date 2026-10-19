@@ -92,16 +92,29 @@ enum ContainerStore {
 
     static func resolveAppContainerPath(bundleID: String) -> String? {
         guard (try? PatchPathValidator.canonicalBundleIdentifier(bundleID)) == bundleID else {
+            log("patch: rejected invalid bundle identifier \(bundleID)")
             return nil
         }
         var lookupError: NSString?
         if let path = MCMActivateContainerPath(2, bundleID, false, &lookupError),
            isApplicationContainerPath(path) {
-            log("patch: MHA-C2 resolved \(bundleID)")
-            return path
+            let canonical = ContainerDiscoveryMerger.canonicalPath(path)
+            log("patch: MHA-C2 resolved \(bundleID) -> \(canonical)")
+            return canonical
         }
         let detail = lookupError.map(String.init) ?? "unavailable"
         log("patch: MHA-C2 could not resolve \(bundleID), detail=\(detail)")
+
+        // LaunchServices/MobileInstallation often already exposes the data
+        // container in its app record even when MCM refuses to activate a
+        // lease. Use that authoritative path before falling back to a full
+        // filesystem metadata scan. This is especially important on newer
+        // iOS builds where the app browser can see an installed app but the
+        // direct MHA-C2 activation intermittently returns no path.
+        if let apiPath = applicationDataContainerPathFromAPI(bundleID: bundleID) {
+            log("patch: MobileInstallation supplied container for \(bundleID) -> \(apiPath)")
+            return apiPath
+        }
 
         // Fallback for iOS builds where MCM refuses to hand out sandbox
         // tokens (e.g. iOS 18.1.x): scan the app-data root with the inode
@@ -112,6 +125,24 @@ enum ContainerStore {
             return scanned
         }
         return nil
+    }
+
+    private static func applicationDataContainerPathFromAPI(bundleID: String) -> String? {
+        guard let records = installedAppInfo() as? [String: [String: Any]],
+              let info = records[bundleID],
+              let rawPath = info["container"] as? String,
+              !rawPath.isEmpty else {
+            log("patch: MobileInstallation has no container record for \(bundleID)")
+            return nil
+        }
+
+        let canonical = ContainerDiscoveryMerger.canonicalPath(rawPath)
+        guard isApplicationContainerPath(canonical),
+              FileManager.default.fileExists(atPath: canonical) else {
+            log("patch: MobileInstallation container is invalid or inaccessible for \(bundleID): \(canonical)")
+            return nil
+        }
+        return canonical
     }
 
     static func resolveAppContainerPathByMetadataScan(bundleID: String) -> String? {

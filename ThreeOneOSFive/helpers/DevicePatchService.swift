@@ -4,8 +4,12 @@ enum DevicePatchService {
     static func apply(project: PatchProject) throws -> PatchTransactionReceipt {
         let bundleIDs = orderedBundleIdentifiers(in: project)
         return try withResolvedContainers(bundleIDs: bundleIDs) { roots in
+            let effectiveProject = projectUsingInstalledAssetIndexerPathIfNeeded(
+                project,
+                roots: roots
+            )
             try PatchTransaction.apply(
-                project: project,
+                project: effectiveProject,
                 backupRoot: try PatchProjectLibrary.backupRootURL(),
                 containerResolver: { bundleID in
                     guard let root = roots[bundleID] else {
@@ -77,6 +81,49 @@ enum DevicePatchService {
 
     private static func orderedBundleIdentifiers(in project: PatchProject) -> [String] {
         project.allBundleIdentifiers
+    }
+
+    private static let assetIndexerDirectory =
+        "Documents/contentcache/Compulsory/ios/gameassetbundles/avatar"
+    private static let currentAssetIndexerFilename =
+        "assetindexer.U6Zffc4YIR3DslNj3cXvYGAqz58~3D"
+    private static let legacyAssetIndexerFilename =
+        "assetindexer.H5ak1JM1Eck~2FxRcJrEp~2FMzeuqmY~3D"
+
+    private static func projectUsingInstalledAssetIndexerPathIfNeeded(
+        _ project: PatchProject,
+        roots: [String: URL],
+        fileManager: FileManager = .default
+    ) -> PatchProject {
+        var adjusted = project
+
+        for index in adjusted.rules.indices {
+            let rule = adjusted.rules[index]
+            let currentPath = assetIndexerDirectory + "/" + currentAssetIndexerFilename
+            guard rule.relativePath == currentPath,
+                  let root = roots[rule.bundleID] else {
+                continue
+            }
+
+            let currentURL = root.appendingPathComponent(currentPath, isDirectory: false)
+            guard !fileManager.fileExists(atPath: currentURL.path) else {
+                continue
+            }
+
+            let legacyPath = assetIndexerDirectory + "/" + legacyAssetIndexerFilename
+            let legacyURL = root.appendingPathComponent(legacyPath, isDirectory: false)
+            guard fileManager.fileExists(atPath: legacyURL.path) else {
+                continue
+            }
+
+            adjusted.rules[index].relativePath = legacyPath
+            log(
+                "patch: U6 asset indexer missing; using installed legacy target " +
+                "\(legacyPath) for \(rule.bundleID)"
+            )
+        }
+
+        return adjusted
     }
 
     private static func withResolvedContainers<T>(
