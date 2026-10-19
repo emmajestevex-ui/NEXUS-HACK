@@ -712,7 +712,9 @@ async function saveCategoryFromForm(event) {
   let iconURL = content.categories.find((category) => category.id === els.editingCategoryId.value)?.icon_url || null;
   const iconFile = els.categoryIconFileInput.files?.[0];
   if (iconFile) {
-    const iconPath = `content/ui-icons/${crypto.randomUUID()}.${safeStorageFileName(iconFile.name).split(".").pop() || "png"}`;
+    // The UI bucket policy only allows objects under ui-icons/.
+    // Keep this separate from the content bucket paths used by patches.
+    const iconPath = `ui-icons/${crypto.randomUUID()}.${safeStorageFileName(iconFile.name).split(".").pop() || "png"}`;
     const { error } = await supabaseClient.storage.from(UI_BUCKET).upload(iconPath, iconFile, { cacheControl: "31536000", contentType: iconFile.type || "image/png", upsert: true });
     if (error) { els.settingsStatusText.textContent = adminErrorMessage(error); return; }
     iconURL = `${SUPABASE_URL}/storage/v1/object/public/${UI_BUCKET}/${iconPath}`;
