@@ -245,6 +245,10 @@ struct ThreeOneOSFiveApp: App {
             .onChange(of: scenePhase) { phase in
                 guard phase == .active else { return }
                 refreshLicenseStatus()
+                // A foreground transition is a new entry into the app. The
+                // remote store is checked immediately so the user never has
+                // to remember to press Sincronizar first.
+                remoteContentStore.syncIfPossible(force: true)
             }
             .onReceive(licensePoller) { _ in
                 guard scenePhase == .active else { return }

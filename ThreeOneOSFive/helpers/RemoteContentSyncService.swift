@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import Combine
+import Security
 
 struct RemoteContentFile: Codable, Identifiable, Equatable {
     let id: String
@@ -390,6 +391,175 @@ struct RemoteContentManifest: Codable, Equatable {
     }
 }
 
+// The manifest comes from the server over TLS and every download is checked
+// against its SHA-256. This second, device-bound ledger protects the local
+// cache as well: a copied/replaced manifest or payload is not eligible for
+// applying until a trusted sync has repaired it.
+private struct RemoteContentIntegrityRecord: Codable {
+    let manifestDigest: String
+    let fileDigests: [String: String]
+}
+
+private struct RemoteContentIntegrityEnvelope: Codable {
+    let record: RemoteContentIntegrityRecord
+    let signature: String
+}
+
+enum RemoteContentIntegrity {
+    private static let keychainService = "com.apple.mobile.MobileHouseArrest.nexus-content-integrity"
+    private static let keychainAccount = "manifest-hmac-key"
+
+    static func store(manifest: RemoteContentManifest) -> Bool {
+        guard let key = loadOrCreateKey(),
+              let recordData = encode(record(for: manifest)) else {
+            return false
+        }
+
+        let signature = HMAC<SHA256>.authenticationCode(for: recordData, using: key)
+        let envelope = RemoteContentIntegrityEnvelope(
+            record: record(for: manifest),
+            signature: Data(signature).base64EncodedString()
+        )
+        guard let envelopeData = try? encoder.encode(envelope) else { return false }
+        do {
+            try envelopeData.write(to: ledgerURL(), options: .atomic)
+            harden(ledgerURL())
+            return true
+        } catch {
+            log("remote security: could not store integrity ledger — \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    static func manifestIsTrusted(_ manifest: RemoteContentManifest) -> Bool {
+        guard let key = loadKey(),
+              let envelope = try? Data(contentsOf: ledgerURL()),
+              let decoded = try? decoder.decode(RemoteContentIntegrityEnvelope.self, from: envelope),
+              let recordData = encode(decoded.record),
+              let signatureData = Data(base64Encoded: decoded.signature),
+              HMAC<SHA256>.isValidAuthenticationCode(signatureData, authenticating: recordData, using: key),
+              decoded.record.manifestDigest == digest(of: manifest) else {
+            return false
+        }
+        return decoded.record.fileDigests == record(for: manifest).fileDigests
+    }
+
+    static func fileIsTrusted(
+        _ file: RemoteContentFile,
+        manifest: RemoteContentManifest,
+        at url: URL,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        guard manifestIsTrusted(manifest),
+              let expectedDigest = record(for: manifest).fileDigests[file.id],
+              expectedDigest == file.sha256,
+              fileManager.fileExists(atPath: url.path),
+              let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? NSNumber,
+              file.byteSize <= 0 || size.int64Value == file.byteSize,
+              let actualDigest = sha256Hex(for: url) else {
+            return false
+        }
+        return actualDigest == expectedDigest
+    }
+
+    static func harden(_ url: URL) {
+        let fileManager = FileManager.default
+        try? fileManager.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: url.path
+        )
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
+    }
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
+    }()
+
+    private static let decoder = JSONDecoder()
+
+    private static func record(for manifest: RemoteContentManifest) -> RemoteContentIntegrityRecord {
+        RemoteContentIntegrityRecord(
+            manifestDigest: digest(of: manifest),
+            fileDigests: Dictionary(
+                uniqueKeysWithValues: manifest.files
+                    .filter(\.isAvailable)
+                    .map { ($0.id, $0.sha256) }
+            )
+        )
+    }
+
+    private static func encode(_ record: RemoteContentIntegrityRecord) -> Data? {
+        try? encoder.encode(record)
+    }
+
+    private static func digest(of manifest: RemoteContentManifest) -> String {
+        let data = (try? encoder.encode(manifest)) ?? Data()
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func sha256Hex(for url: URL) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        do {
+            while true {
+                let data = try handle.read(upToCount: 1_024 * 1_024) ?? Data()
+                if data.isEmpty { break }
+                hasher.update(data: data)
+            }
+        } catch {
+            return nil
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func ledgerURL() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let root = base.appendingPathComponent("NexusHackRemoteContent", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root.appendingPathComponent("integrity-ledger.json", isDirectory: false)
+    }
+
+    private static func loadKey() -> SymmetricKey? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              data.count == 32 else { return nil }
+        return SymmetricKey(data: data)
+    }
+
+    private static func loadOrCreateKey() -> SymmetricKey? {
+        if let existing = loadKey() { return existing }
+
+        let key = SymmetricKey(size: .bits256)
+        let keyData = key.withUnsafeBytes { Data($0) }
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecValueData as String: keyData,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecSuccess { return key }
+        query.removeValue(forKey: kSecValueData as String)
+        return loadKey()
+    }
+}
+
 enum RemoteContentSyncError: LocalizedError {
     case missingLicense
     case badURL
@@ -397,6 +567,7 @@ enum RemoteContentSyncError: LocalizedError {
     case server(String)
     case invalidManifest(String)
     case hashMismatch(String)
+    case integrityUnavailable
     case rollbackFailed(String)
 
     var errorDescription: String? {
@@ -413,6 +584,8 @@ enum RemoteContentSyncError: LocalizedError {
             return message
         case .hashMismatch(let name):
             return "Integrity check failed for \(name)."
+        case .integrityUnavailable:
+            return "Remote content could not be protected on this device."
         case .rollbackFailed(let message):
             return "Update failed and rollback could not finish: \(message)"
         }
@@ -449,6 +622,16 @@ final class RemoteContentStore: ObservableObject {
             remoteVersion = 0
             return
         }
+        guard RemoteContentIntegrity.manifestIsTrusted(manifest) else {
+            // Do not expose or apply a cache whose manifest was replaced
+            // outside the app. The next automatic sync will repair it.
+            installedFiles = []
+            appContent = .empty
+            remoteVersion = 0
+            statusText = "Security check required"
+            detailText = "Remote content will be verified during synchronization."
+            return
+        }
         installedFiles = manifest.files.filter(\.isAvailable)
         appContent = manifest.appContent
         remoteVersion = manifest.version
@@ -457,6 +640,8 @@ final class RemoteContentStore: ObservableObject {
     func syncIfPossible(force: Bool = false) {
         loadLocalState()
         guard !isBusy else { return }
+        let licenseKey = UserDefaults.standard.string(forKey: "greeg.license.key")?.normalizedLicenseKey ?? ""
+        guard !licenseKey.isEmpty else { return }
         if !force,
            let lastAutomaticAttempt,
            Date().timeIntervalSince(lastAutomaticAttempt) < minimumAutomaticInterval {
@@ -726,6 +911,7 @@ final class RemoteContentStore: ObservableObject {
     ) throws {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: currentRootURL, withIntermediateDirectories: true)
+        RemoteContentIntegrity.harden(currentRootURL)
         let previousByID = Dictionary(uniqueKeysWithValues: (previousManifest?.files ?? []).map { ($0.id, $0) })
 
         for file in manifest.files where file.isAvailable {
@@ -748,6 +934,7 @@ final class RemoteContentStore: ObservableObject {
             }
 
             try fileManager.moveItem(at: stagedURL, to: destinationURL)
+            RemoteContentIntegrity.harden(destinationURL)
             log("INSTALADO: \(file.name) -> \(destinationURL.path)")
 
             if let previous = previousByID[file.id],
@@ -794,8 +981,13 @@ final class RemoteContentStore: ObservableObject {
 
     private func saveLocalManifest(_ manifest: RemoteContentManifest) throws {
         try FileManager.default.createDirectory(at: storeRootURL, withIntermediateDirectories: true)
+        RemoteContentIntegrity.harden(storeRootURL)
         let data = try encoder.encode(manifest)
         try data.write(to: manifestURL, options: .atomic)
+        RemoteContentIntegrity.harden(manifestURL)
+        guard RemoteContentIntegrity.store(manifest: manifest) else {
+            throw RemoteContentSyncError.integrityUnavailable
+        }
     }
 
     private func createBackup() throws -> URL {
@@ -849,6 +1041,7 @@ final class RemoteContentStore: ObservableObject {
         let stagingURL = storeRootURL.appendingPathComponent("staging", isDirectory: true)
         try? fileManager.removeItem(at: stagingURL)
         try fileManager.createDirectory(at: stagingURL, withIntermediateDirectories: true)
+        RemoteContentIntegrity.harden(stagingURL)
         return stagingURL
     }
 
@@ -936,7 +1129,8 @@ enum RemoteContentLibrary {
         let requestedPath = safeRelativePath(relativePath)
         let requestedBundle = safeBundleID(bundleID)
         let requestedSlugs = Set(slugs.map(safeSlug))
-        guard let file = loadManifest(fileManager: fileManager)?.files.first(where: { file in
+        guard let manifest = loadManifest(fileManager: fileManager),
+              let file = manifest.files.first(where: { file in
             guard file.isAvailable else { return false }
             if !requestedSlugs.isEmpty {
                 return requestedSlugs.contains { slugMatches(safeSlug(file.slug), expected: $0) }
@@ -949,7 +1143,9 @@ enum RemoteContentLibrary {
         }
 
         let url = url(inside: currentRootURL(fileManager: fileManager), relativePath: file.cacheRelativePath)
-        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        guard RemoteContentIntegrity.fileIsTrusted(file, manifest: manifest, at: url, fileManager: fileManager) else {
+            return nil
+        }
         return (file, url)
     }
 
@@ -977,8 +1173,16 @@ enum RemoteContentLibrary {
         for file: RemoteContentFile,
         fileManager: FileManager = .default
     ) -> URL? {
+        guard let manifest = loadManifest(fileManager: fileManager),
+              let trustedFile = manifest.files.first(where: {
+                  $0.id == file.id && $0.cacheRelativePath == file.cacheRelativePath && $0.isAvailable
+              }) else {
+            return nil
+        }
         let url = url(inside: currentRootURL(fileManager: fileManager), relativePath: file.cacheRelativePath)
-        return fileManager.fileExists(atPath: url.path) ? url : nil
+        return RemoteContentIntegrity.fileIsTrusted(trustedFile, manifest: manifest, at: url, fileManager: fileManager)
+            ? url
+            : nil
     }
 
     private static func safeRelativePath(_ value: String) -> String {
