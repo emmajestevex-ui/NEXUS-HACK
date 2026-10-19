@@ -541,22 +541,22 @@ private struct NexusCategoryTabView: View {
                     }
 
                     if files.isEmpty {
-                        GreegPanel {
-                            VStack(spacing: 10) {
-                                NexusRemoteArtwork(systemName: category.icon, iconURL: category.iconURL, tint: nexusCategoryColor(category.color), size: 54)
-                                Text("Sin contenido todavía")
-                                    .font(.headline.weight(.bold))
-                                Text(category.isContainerCategory
-                                     ? "Crea categorías dentro de esta sección para organizar el contenido."
-                                     : "Publica archivos en esta categoría y pulsa Sincronizar.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.center)
+                        if childCategories.isEmpty {
+                            GreegPanel {
+                                VStack(spacing: 10) {
+                                    NexusRemoteArtwork(systemName: category.icon, iconURL: category.iconURL, tint: nexusCategoryColor(category.color), size: 54)
+                                    Text("Sin contenido todavía")
+                                        .font(.headline.weight(.bold))
+                                    Text("Publica archivos en esta categoría y pulsa Sincronizar.")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.center)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 18)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 18)
+                            .nexusEntrance(index: 1)
                         }
-                        .nexusEntrance(index: childCategories.isEmpty ? 1 : 2)
                     } else {
                         ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
                             GreegPanel {
