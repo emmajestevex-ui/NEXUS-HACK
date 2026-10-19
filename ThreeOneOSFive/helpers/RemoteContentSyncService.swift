@@ -471,7 +471,8 @@ enum RemoteContentIntegrity {
         )
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
-        try? url.setResourceValues(values)
+        var protectedURL = url
+        try? protectedURL.setResourceValues(values)
     }
 
     private static let encoder: JSONEncoder = {
