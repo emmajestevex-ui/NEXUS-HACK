@@ -1237,15 +1237,18 @@ private struct RemoteFileArtwork: View {
     var body: some View {
         Group {
             if let url = file.nexusThumbnailURL {
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .padding(6)
+                if file.nexusThumbnailRequiresAuth {
+                    AuthenticatedRemoteThumbnail(url: url, tint: tint)
+                } else {
+                    AsyncImage(url: url) { phase in
+                        if let image = phase.image {
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .padding(6)
+                        } else { fallback }
                     }
-                    else { fallback }
                 }
             } else if file.isTextContent {
                 Image(systemName: "doc.text.fill")
@@ -1267,6 +1270,59 @@ private struct RemoteFileArtwork: View {
     }
 }
 
+private struct AuthenticatedRemoteThumbnail: View {
+    let url: URL
+    let tint: Color
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(6)
+            } else if failed {
+                Image(systemName: "shippingbox.fill")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ProgressView()
+                    .tint(tint)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: url) {
+            await loadImage()
+        }
+    }
+
+    private func loadImage() async {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        request.setValue(SupabaseLicenseConfig.publishableKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(SupabaseLicenseConfig.publishableKey)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200..<300).contains(httpResponse.statusCode),
+                  let decoded = UIImage(data: data),
+                  !Task.isCancelled else {
+                failed = true
+                return
+            }
+            image = decoded
+        } catch {
+            guard !Task.isCancelled else { return }
+            failed = true
+        }
+    }
+}
+
 private extension String {
     var nexusCleanDescription: String {
         replacingOccurrences(of: #"\s*\[GREEG_STYLE:[^\]]+\]"#, with: "", options: .regularExpression)
@@ -1277,12 +1333,36 @@ private extension String {
 }
 
 private extension RemoteContentFile {
-    var nexusThumbnailURL: URL? {
+    var nexusThumbnailToken: String? {
         guard let description,
               let match = description.range(of: #"\[NEXUS_IMAGE:([^\]]+)\]"#, options: .regularExpression) else { return nil }
         let token = String(String(description[match]).replacingOccurrences(of: "[NEXUS_IMAGE:", with: "").dropLast())
-        guard !token.isEmpty else { return nil }
-        return URL(string: "\(SupabaseLicenseConfig.projectURL.absoluteString)/storage/v1/object/public/nexus-hack-content/\(token.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? token)")
+        return token.isEmpty ? nil : token
+    }
+
+    var nexusThumbnailRequiresAuth: Bool {
+        !(nexusThumbnailToken?.hasPrefix("ui-icons/") ?? false)
+    }
+
+    var nexusThumbnailURL: URL? {
+        guard let token = nexusThumbnailToken else { return nil }
+        let bucket: String
+        let path: String
+        if token.hasPrefix("ui-icons/") {
+            bucket = "nexus-hack-ui"
+            path = token
+        } else {
+            // Keep older records readable after thumbnails moved to the
+            // public UI bucket. New records always use the branch above.
+            bucket = "nexus-hack-content"
+            path = token
+        }
+        let encodedPath = path
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }
+            .joined(separator: "/")
+        let endpoint = token.hasPrefix("ui-icons/") ? "public/" : ""
+        return URL(string: "\(SupabaseLicenseConfig.projectURL.absoluteString)/storage/v1/object/\(endpoint)\(bucket)/\(encodedPath)")
     }
 }
 

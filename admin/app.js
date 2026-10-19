@@ -951,9 +951,11 @@ async function saveFile(event) {
       } catch (error) {
         throw error;
       }
-      thumbnailPath = `content/thumbnails/${crypto.randomUUID()}.${safeStorageFileName(uploadThumbnail.name).split(".").pop() || "png"}`;
+      // Thumbnails are UI media, not patch payloads. Store them in the
+      // public UI bucket so the iOS app can render them without auth headers.
+      thumbnailPath = `ui-icons/patch-thumbnails/${crypto.randomUUID()}.${safeStorageFileName(uploadThumbnail.name).split(".").pop() || "png"}`;
       const { error: thumbnailError } = await supabaseClient.storage
-        .from(BUCKET)
+        .from(UI_BUCKET)
         .upload(thumbnailPath, uploadThumbnail, {
           cacheControl: "3600",
           contentType: uploadThumbnail.type || "image/png",
