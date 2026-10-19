@@ -105,6 +105,30 @@ enum ContainerStore {
         let detail = lookupError.map(String.init) ?? "unavailable"
         log("patch: MHA-C2 could not resolve \(bundleID), detail=\(detail)")
 
+        // On some iOS builds the container query returns the correct path but
+        // refuses the sandbox-token activation. When the exploit already
+        // provides filesystem access, the non-activating lookup is still a
+        // valid and usable container root.
+        var directLookupError: NSString?
+        if let path = MCMContainerPathForIdentifier(
+            2,
+            bundleID,
+            false,
+            &directLookupError
+        ) {
+            let canonical = ContainerDiscoveryMerger.canonicalPath(path)
+            if isApplicationContainerPath(canonical),
+               FileManager.default.fileExists(atPath: canonical) {
+                log("patch: direct MCM path resolved \(bundleID) -> \(canonical)")
+                return canonical
+            }
+            let directDetail = directLookupError.map(String.init) ?? "invalid path"
+            log("patch: direct MCM path unusable for \(bundleID), detail=\(directDetail)")
+        } else {
+            let directDetail = directLookupError.map(String.init) ?? "unavailable"
+            log("patch: direct MCM lookup failed for \(bundleID), detail=\(directDetail)")
+        }
+
         // LaunchServices/MobileInstallation often already exposes the data
         // container in its app record even when MCM refuses to activate a
         // lease. Use that authoritative path before falling back to a full
