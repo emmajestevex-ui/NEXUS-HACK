@@ -19,6 +19,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
     let byteSize: Int64
     let sha256: String
     let storagePath: String
+    let requiresKey: Bool
+    let priceUSD: Double
     let isActive: Bool
     let deletedAt: String?
     let publishedAt: String?
@@ -39,6 +41,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         case byteSize = "byte_size"
         case sha256
         case storagePath = "storage_path"
+        case requiresKey = "requires_key"
+        case priceUSD = "price_usd"
         case isActive = "is_active"
         case deletedAt = "deleted_at"
         case publishedAt = "published_at"
@@ -64,6 +68,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         byteSize = (try? container.decode(Int64.self, forKey: .byteSize)) ?? 0
         sha256 = ((try? container.decode(String.self, forKey: .sha256)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         storagePath = ((try? container.decode(String.self, forKey: .storagePath)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        requiresKey = (try? container.decode(Bool.self, forKey: .requiresKey)) ?? true
+        priceUSD = (try? container.decode(Double.self, forKey: .priceUSD)) ?? 15.0
         isActive = (try? container.decode(Bool.self, forKey: .isActive)) ?? true
         deletedAt = try? container.decodeIfPresent(String.self, forKey: .deletedAt)
         publishedAt = try? container.decodeIfPresent(String.self, forKey: .publishedAt)
@@ -85,6 +91,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         byteSize: Int64,
         sha256: String,
         storagePath: String,
+        requiresKey: Bool = true,
+        priceUSD: Double = 15.0,
         isActive: Bool = true,
         deletedAt: String? = nil,
         publishedAt: String?
@@ -104,6 +112,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         self.byteSize = byteSize
         self.sha256 = sha256.lowercased()
         self.storagePath = storagePath
+        self.requiresKey = requiresKey
+        self.priceUSD = priceUSD
         self.isActive = isActive
         self.deletedAt = deletedAt
         self.publishedAt = publishedAt
@@ -126,6 +136,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         try container.encode(byteSize, forKey: .byteSize)
         try container.encode(sha256, forKey: .sha256)
         try container.encode(storagePath, forKey: .storagePath)
+        try container.encode(requiresKey, forKey: .requiresKey)
+        try container.encode(priceUSD, forKey: .priceUSD)
         try container.encode(isActive, forKey: .isActive)
         try container.encodeIfPresent(deletedAt, forKey: .deletedAt)
         try container.encodeIfPresent(publishedAt, forKey: .publishedAt)
@@ -166,6 +178,10 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
 
     var isTextContent: Bool {
         contentType == "text"
+    }
+
+    var accessCapability: String {
+        "content:\(id.lowercased())"
     }
 
     private static func safeComponent(_ value: String, fallback: String) -> String {
@@ -328,7 +344,7 @@ struct NexusAppContent: Codable, Equatable {
         NexusAppTab(id: "membership", title: "Membresía", icon: "person.crop.circle.fill", kind: "membership", sortOrder: 4),
         NexusAppTab(id: "support", title: "Soporte", icon: "headphones.circle.fill", kind: "support", sortOrder: 5)
     ]
-    static let empty = NexusAppContent(title: "NEXUS HACK", subtitle: "Control privado", announcement: nil, categories: [], socials: [], tabs: defaultTabs)
+    static let empty = NexusAppContent(title: "NEXUS", subtitle: "Control privado", announcement: nil, categories: [], socials: [], tabs: defaultTabs)
 
     init(title: String, subtitle: String, announcement: NexusAppAnnouncement?, categories: [NexusAppCategory], socials: [NexusAppSocial], tabs: [NexusAppTab] = defaultTabs) {
         self.title = title; self.subtitle = subtitle; self.announcement = announcement; self.categories = categories; self.socials = socials; self.tabs = tabs
@@ -336,7 +352,7 @@ struct NexusAppContent: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        title = (try? c.decode(String.self, forKey: .title)) ?? "NEXUS HACK"
+        title = (try? c.decode(String.self, forKey: .title)) ?? "NEXUS"
         subtitle = (try? c.decode(String.self, forKey: .subtitle)) ?? "Control privado"
         announcement = try? c.decodeIfPresent(NexusAppAnnouncement.self, forKey: .announcement)
         categories = (try? c.decode([NexusAppCategory].self, forKey: .categories)) ?? []
@@ -838,6 +854,11 @@ final class RemoteContentStore: ObservableObject {
         var changed: [RemoteContentFile] = []
 
         for file in remoteFiles {
+            if file.requiresKey && !ContentLicenseStore.hasAccess(fileID: file.id) {
+                // Keep protected metadata visible, but never download a
+                // payload until the individual grant is present.
+                continue
+            }
             let installed = localByID[file.id]
             let targetURL = localURL(for: file)
             let metadataChanged = installed?.version != file.version
@@ -859,7 +880,9 @@ final class RemoteContentStore: ObservableObject {
         }
 
         let obsolete = localFiles.filter { file in
-            !remoteIDs.contains(file.id) || explicitlyDeletedIDs.contains(file.id)
+            !remoteIDs.contains(file.id)
+                || explicitlyDeletedIDs.contains(file.id)
+                || (file.requiresKey && !ContentLicenseStore.hasAccess(fileID: file.id))
         }
 
         log(
@@ -876,6 +899,9 @@ final class RemoteContentStore: ObservableObject {
     }
 
     private func download(_ file: RemoteContentFile, into stagingRoot: URL) async throws -> URL {
+        guard !file.requiresKey || ContentLicenseStore.hasAccess(fileID: file.id) else {
+            throw RemoteContentSyncError.server("Este archivo requiere una key individual.")
+        }
         let sourceURL = try objectURL(for: file.storagePath)
         var request = URLRequest(url: sourceURL)
         request.timeoutInterval = 60
@@ -1174,7 +1200,8 @@ enum RemoteContentLibrary {
         for file: RemoteContentFile,
         fileManager: FileManager = .default
     ) -> URL? {
-        guard let manifest = loadManifest(fileManager: fileManager),
+        guard !file.requiresKey || ContentLicenseStore.hasAccess(fileID: file.id),
+              let manifest = loadManifest(fileManager: fileManager),
               let trustedFile = manifest.files.first(where: {
                   $0.id == file.id && $0.cacheRelativePath == file.cacheRelativePath && $0.isAvailable
               }) else {
