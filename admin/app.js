@@ -175,6 +175,8 @@ const els = {
   assetVariantInput: $("#assetVariantInput"),
   targetPathInput: $("#targetPathInput"),
   descriptionInput: $("#descriptionInput"),
+  requiresKeyInput: $("#requiresKeyInput"),
+  priceUSDInput: $("#priceUSDInput"),
   packageModeLabel: $("#packageModeLabel"),
   importedPackageInput: $("#importedPackageInput"),
   thumbnailInput: $("#thumbnailInput"),
@@ -206,6 +208,7 @@ const els = {
   keyDurationInput: $("#keyDurationInput"),
   keyDurationUnitInput: $("#keyDurationUnitInput"),
   keyLabelInput: $("#keyLabelInput"),
+  keyContentInput: $("#keyContentInput"),
   customKeyInput: $("#customKeyInput"),
   specialAssetIndexerInput: $("#specialAssetIndexerInput"),
   createKeysButton: $("#createKeysButton"),
@@ -460,6 +463,7 @@ async function loadFiles() {
   }
 
   state.files = (data ?? []).filter(isGreegFile);
+  refreshKeyContentOptions();
   setStatus("Listo. Recuerda publicar para que los iPhone reciban los cambios.");
   renderFiles();
 }
@@ -845,6 +849,7 @@ async function createKeys(event) {
   const durationHours = durationToHours(els.keyDurationInput.value, els.keyDurationUnitInput.value);
   const label = els.keyLabelInput.value.trim();
   const capabilities = els.specialAssetIndexerInput.checked ? ["special_assetindexer"] : [];
+  if (els.keyContentInput.value) capabilities.push(`content:${els.keyContentInput.value.toLowerCase()}`);
 
   if (customKey && !customKey.startsWith("NEXUS-")) {
     els.keysStatusText.textContent = "La key personalizada debe empezar con NEXUS-.";
@@ -875,6 +880,21 @@ async function createKeys(event) {
     els.keysStatusText.textContent = adminErrorMessage(error);
   } finally {
     els.createKeysButton.disabled = false;
+  }
+}
+
+function refreshKeyContentOptions() {
+  if (!els.keyContentInput) return;
+  const selected = els.keyContentInput.value;
+  els.keyContentInput.innerHTML = '<option value="">Key general / sin patch específico</option>';
+  for (const file of state.files.filter((item) => isManifestFile(item) && item.content_type !== "text")) {
+    const option = document.createElement("option");
+    option.value = file.id;
+    option.textContent = `${file.name} — $${Number(file.price_usd || 15).toFixed(2)}`;
+    els.keyContentInput.append(option);
+  }
+  if ([...els.keyContentInput.options].some((option) => option.value === selected)) {
+    els.keyContentInput.value = selected;
   }
 }
 
@@ -1016,6 +1036,8 @@ async function saveFile(event) {
       p_storage_path: storagePath,
       p_content_type: contentType,
       p_text_content: contentType === "text" ? textBody : null,
+      p_requires_key: els.requiresKeyInput.checked,
+      p_price_usd: Math.max(0.01, Number(els.priceUSDInput.value || 15)),
       p_force_new: !isReplacing,
     });
 
@@ -1174,6 +1196,8 @@ function editFile(file) {
   els.targetPathInput.dataset.touched = "true";
   updateAssetVariantVisibility();
   els.descriptionInput.value = cleanDescription(file.description);
+  els.requiresKeyInput.checked = file.requires_key !== false;
+  els.priceUSDInput.value = Number(file.price_usd || 15).toFixed(2);
   els.descriptionInput.dataset.thumbnailPath = thumbnailMarkerFromDescription(file.description);
   els.importedPackageInput.checked = String(file.file_name || "").toLowerCase().endsWith(".3105")
     || String(file.mime_type || "").toLowerCase() === "application/vnd.greeg.3105";
@@ -1193,6 +1217,8 @@ function resetForm() {
   delete els.targetPathInput.dataset.touched;
   els.categoryInput.value = "files";
   els.importedPackageInput.checked = false;
+  els.requiresKeyInput.checked = true;
+  els.priceUSDInput.value = "15.00";
   els.textContentInput.value = "";
   delete els.descriptionInput.dataset.thumbnailPath;
   els.targetBundleInput.value = DEFAULT_TARGET_BUNDLE;
@@ -1448,6 +1474,7 @@ function renderFileCard(file) {
     file.target_bundle || DEFAULT_TARGET_BUNDLE,
     file.file_name,
     formatBytes(file.byte_size),
+    file.requires_key === false ? "Sin key individual" : `$${Number(file.price_usd || 15).toFixed(2)} · key individual`,
   ].join(" / ");
   node.querySelector(".filePath").textContent = `Ruta: ${file.target_path || fallbackTargetPath(file)}`;
   node.querySelector(".fileHash").textContent = file.sha256;

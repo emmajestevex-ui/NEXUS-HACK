@@ -4,14 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="Cache-Control" content="no-store" />
-    <title>NEXUS HACK Admin</title>
+    <title>NEXUS Admin</title>
     <link rel="stylesheet" href="./styles.css?v=20261005-ios27-install" />
   </head>
   <body>
     <main class="shell">
       <section class="topbar">
         <div>
-          <p class="eyebrow">NEXUS HACK</p>
+          <p class="eyebrow">NEXUS</p>
           <h1>Archivos / Contenido</h1>
         </div>
         <div class="session">
@@ -102,6 +102,15 @@
             <label>
               Descripcion
               <textarea id="descriptionInput" rows="3" placeholder="Nota interna opcional"></textarea>
+            </label>
+            <label class="checkLabel">
+              <input id="requiresKeyInput" type="checkbox" checked />
+              Proteger este archivo con key individual
+              <span class="fieldHint">La app no descargará ni aplicará el archivo hasta validar su key en el servidor.</span>
+            </label>
+            <label>
+              Precio de referencia (USD)
+              <input id="priceUSDInput" type="number" min="0.01" step="0.01" value="15.00" />
             </label>
             <label id="packageModeLabel" class="packageModeLabel">
               <span class="packageModeTitle">Formato del archivo</span>
@@ -235,6 +244,13 @@
             <label>
               Nota
               <input id="keyLabelInput" type="text" maxlength="80" placeholder="Cliente o nota interna" />
+            </label>
+            <label>
+              Patch autorizado
+              <select id="keyContentInput">
+                <option value="">Key general / sin patch específico</option>
+              </select>
+              <span class="fieldHint">La key quedará limitada al patch elegido. Precio de referencia: $15.00 USD.</span>
             </label>
             <label>
               Key personalizada
