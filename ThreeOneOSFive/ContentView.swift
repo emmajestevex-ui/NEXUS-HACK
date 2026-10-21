@@ -1249,7 +1249,7 @@ private struct ContentKeyUnlockView: View {
             Form {
                 Section {
                     Text(file.name).font(.headline)
-                    Text("Este contenido está protegido. Precio de referencia: $\(file.priceUSD, specifier: \"%.2f\") USD.")
+                    Text("Este contenido está protegido. Precio de referencia: $\(file.priceUSD, specifier: "%.2f") USD.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
