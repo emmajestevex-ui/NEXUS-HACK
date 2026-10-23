@@ -920,12 +920,37 @@ final class RemoteContentStore: ObservableObject {
         guard !syncingContent.categoryRequiresKey(file.category, fallback: file.requiresKey) || ContentLicenseStore.hasAccess(category: file.category) else {
             throw RemoteContentSyncError.server("Esta categoría requiere una key válida.")
         }
-        let sourceURL = try objectURL(for: file.storagePath)
+        // Ciphertext remains in private Storage; the Edge Function verifies the
+        // general app license, the category license and the exact published file.
+        // The server decrypts using a secret that is never built into this IPA.
+        let encrypted = file.storagePath.hasSuffix(".nex")
+        let sourceURL: URL
+        if encrypted {
+            guard let url = URL(string: SupabaseLicenseConfig.projectURL.absoluteString
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                + "/functions/v1/nexus-secure-patch?mode=download") else {
+                throw RemoteContentSyncError.badURL
+            }
+            sourceURL = url
+        } else {
+            sourceURL = try objectURL(for: file.storagePath)
+        }
         var request = URLRequest(url: sourceURL)
         request.timeoutInterval = 60
         request.setValue(SupabaseLicenseConfig.publishableKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(SupabaseLicenseConfig.publishableKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+        if encrypted {
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let payload: [String: String] = [
+                "content_id": file.id,
+                "device_id": UserDefaults.standard.string(forKey: "greeg.license.device") ?? "",
+                "app_key": UserDefaults.standard.string(forKey: "greeg.license.key")?.normalizedLicenseKey ?? "",
+                "category_key": ContentLicenseStore.sessionKey(for: file.category) ?? ""
+            ]
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        }
 
         let (temporaryURL, response) = try await session.download(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
