@@ -286,7 +286,6 @@ function bindEvents() {
   document.querySelector("#keyCategoryFilter")?.addEventListener("change", renderKeys);
   document.querySelectorAll("[data-admin-target]").forEach(button => button.addEventListener("click", () => setAdminView(button.dataset.adminTarget)));
   els.keyForm.addEventListener("submit", createKeys);
-  document.querySelector("#saveCategoryPassword")?.addEventListener("click", saveNexusCategoryPassword);
   document.querySelector("#goCreateCategoryKeys")?.addEventListener("click", openCategoryKeyGenerator);
   els.copyGeneratedKeysButton.addEventListener("click", copyGeneratedKeys);
   els.loadSettingsButton.addEventListener("click", loadSettings);
@@ -739,7 +738,7 @@ function renderCategoryAccessList() {
     info.append(title,subtitle);
     const control = document.createElement("label"); control.className = "categoryAccessToggle";
     const check = document.createElement("input"); check.type = "checkbox"; check.checked = categoryNeedsKey(cat);
-    const wording = document.createElement("span"); wording.textContent = check.checked ? "Con key" : "Libre (IPA pendiente)";
+    const wording = document.createElement("span"); wording.textContent = check.checked ? "Con key" : "Libre";
     check.addEventListener("change", async () => {
       check.disabled = true;
       await updateCategoryAccess(cat, check.checked);
@@ -777,7 +776,7 @@ async function updateCategoryAccess(cat, needsKey) {
   renderCategoryEditor();
   if (status) status.textContent = needsKey
     ? "Categoria activada con key. Genera claves en Keys de categorias."
-    : "Categoria marcada libre en el panel. La IPA instalada seguira bloqueando sus patches hasta que se actualice.";
+    : "Categoria marcada libre en el panel. Publica los cambios y actualiza a la IPA NEXUS V3 para que sus patches sean libres.";
 }
 
 function renderTabEditor() {
@@ -1106,13 +1105,7 @@ function refreshKeyContentOptions() {
     for (const cat of categories) filter.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
     if (categories.some(cat => cat.id === selectedCategoryFilter)) filter.value = selectedCategoryFilter;
   }
-  const pwdSelect = document.querySelector("#passwordCategorySelect");
-  if (pwdSelect) {
-    const old = pwdSelect.value;
-    pwdSelect.replaceChildren(new Option("Selecciona categoría", ""));
-    for (const cat of categories) pwdSelect.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
-    if (categories.some(cat => cat.id === old)) pwdSelect.value = old;
-  }
+
 }
 
 function openCategoryKeyGenerator() {
@@ -1133,23 +1126,6 @@ function openCategoryKeyGenerator() {
   renderKeys();
   els.keyForm.scrollIntoView({ behavior: "smooth", block: "start" });
   els.keyQuantityInput.focus({ preventScroll: true });
-}
-
-async function saveNexusCategoryPassword() {
-  const categoryID = document.querySelector("#passwordCategorySelect")?.value.trim().toLowerCase();
-  const passwordInput = document.querySelector("#categoryAccessPassword");
-  const status = document.querySelector("#categoryPasswordStatus");
-  const password = passwordInput?.value || "";
-  if (!categoryID || password.length < 12) {
-    if (status) status.textContent = "Selecciona una categoría y escribe al menos 12 caracteres.";
-    return;
-  }
-  if (status) status.textContent = "Guardando de forma segura...";
-  const { data, error } = await supabaseClient.rpc("admin_set_nexus_category_password", {
-    p_category_id: categoryID, p_password: password
-  });
-  if (passwordInput) passwordInput.value = "";
-  if (status) status.textContent = error ? adminErrorMessage(error) : (data?.message || "Contraseña actualizada. No se guardó en el navegador.");
 }
 
 async function copyGeneratedKeys() {
