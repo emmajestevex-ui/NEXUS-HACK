@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="Cache-Control" content="no-store" />
     <title>NEXUS Admin</title>
-    <link rel="stylesheet" href="./styles.css?v=20261023-secciones-separadas" />
+    <link rel="stylesheet" href="./styles.css?v=20261023-cuatro-apartados" />
   </head>
   <body>
     <main class="shell">
@@ -48,9 +48,10 @@
       </section>
 
       <nav id="adminNavigation" class="adminNavigation hidden" aria-label="Secciones de administración">
-        <button type="button" class="adminNavItem isActive" data-admin-target="patches" aria-pressed="true"><span class="adminNavNumber">01</span><span><strong>Patches y archivos</strong><small>Subir, reemplazar y publicar</small></span></button>
-        <button type="button" class="adminNavItem" data-admin-target="categories" aria-pressed="false"><span class="adminNavNumber">02</span><span><strong>Categorías</strong><small>Organizar y asignar acceso</small></span></button>
-        <button type="button" class="adminNavItem" data-admin-target="keys" aria-pressed="false"><span class="adminNavNumber">03</span><span><strong>Keys por categoría</strong><small>Generar, buscar y gestionar</small></span></button>
+        <button type="button" class="adminNavItem isActive" data-admin-target="patches" aria-pressed="true"><span class="adminNavNumber">01</span><span><strong>Patches</strong><small>Subir y publicar archivos</small></span></button>
+        <button type="button" class="adminNavItem" data-admin-target="categories" aria-pressed="false"><span class="adminNavNumber">02</span><span><strong>Categorías</strong><small>Elegir libres o con key</small></span></button>
+        <button type="button" class="adminNavItem" data-admin-target="keys" aria-pressed="false"><span class="adminNavNumber">03</span><span><strong>Keys de categorías</strong><small>Solo categorías protegidas</small></span></button>
+        <button type="button" class="adminNavItem" data-admin-target="app-keys" aria-pressed="false"><span class="adminNavNumber">04</span><span><strong>Keys de la app</strong><small>Licencias normales de NEXUS</small></span></button>
       </nav>
       <section id="adminPanel" class="grid hidden">
         <aside class="panel" data-admin-view="patches">
@@ -202,12 +203,19 @@
               <label>Tipo de contenido<select id="categoryContentTypeInput"><option value="container">Contenedor / solo subcategorías</option><option value="patch">Patch / archivo</option><option value="text">Texto / tutorial</option></select><span class="fieldHint">Un contenedor organiza subcategorías y no recibe archivos directamente.</span></label>
               <label>Categoría padre<select id="categoryParentInput"><option value="">Sin padre</option></select></label>
               <label>Orden<input id="categoryOrderInput" type="number" min="0" value="0" /></label>
+              <label class="checkLabel" id="categoryKeyLabel"><input id="categoryRequireKeyInput" type="checkbox" />Proteger esta categoría con key (opcional)</label>
               <div class="categoryFormActions"><button id="cancelCategoryButton" class="ghost" type="button">Cancelar</button><button class="primary" type="submit">Guardar categoría</button></div>
             </form>
             <div id="categoryList" class="categoryList"></div>
+            <div class="categoryAccessManage">
+              <div class="visualEditorHeader"><div><h3>2. Elegir categorías con key</h3><p class="muted">Decide qué categorías son libres y cuáles necesitan key para desbloquear sus patches.</p></div></div>
+              <div id="categoryAccessList" class="categoryList"></div>
+              <p id="categoryAccessStatus" class="notice" role="status"></p>
+              <p class="fieldHint">Aviso: la IPA actual bloquea todos los patches, incluso categorías marcadas libres. La opción libre necesita compatibilidad en la IPA; este paquete solamente actualiza el panel.</p>
+            </div>
 <div class="categoryPasswordBox">
-                <h3>2. Acceso por categoría</h3>
-                <p class="muted">Selecciona una categoría para gestionar sus licencias. Las keys se asignan a la categoría completa, no a cada patch.</p>
+                <h3>3. Administrar licencias por categoría</h3>
+                <p class="muted">Selecciona una categoría marcada «Con key». Las que estén libres no necesitan una licencia de categoría.</p>
                 <label>Categoría<select id="quickKeyCategorySelect"></select></label>
                 <button id="goCreateCategoryKeys" type="button" class="primary">Gestionar keys de esta categoría →</button>
                 <p id="quickKeyCategoryStatus" class="notice" role="status">Al generar keys, Supabase guarda el permiso de la categoría seleccionada.</p>
@@ -232,9 +240,9 @@
         <section class="panel fullWidth" data-admin-view="keys">
           <div class="panelHeader">
             <div>
-              <h2>Generador de keys por categoría</h2>
+              <h2>Keys para categorías protegidas</h2>
               <p id="keysStatusText" class="muted">Cargando licencias...</p>
-              <p class="muted">Selecciona la categoría a desbloquear; una key puede servir para todos sus patches. No hay generador individual por patch.</p>
+              <p class="muted">Genera keys solamente para las categorías que tú actives. Cada key sirve para una categoría completa.</p>
             </div>
             <div class="actions">
               <button id="refreshKeysButton" class="ghost" type="button">Actualizar keys</button>
@@ -271,7 +279,7 @@
               <select id="keyContentInput">
                 <option value="">Selecciona una categoría</option>
               </select>
-              <span class="fieldHint">Genera una key para toda la categoría seleccionada, no para cada patch. Precio de referencia: $15.00 USD.</span>
+              <span class="fieldHint">Solo categorías con protección activada. La IPA actual puede pedir contraseña adicional.</span>
             </label>
             <label>
               Key personalizada
@@ -297,6 +305,35 @@
           </div>
 
           <div id="keyList" class="fileList"></div>
+        </section>
+        <section class="panel fullWidth" data-admin-view="app-keys">
+          <div class="panelHeader">
+            <div><h2>Keys normales para NEXUS</h2>
+              <p class="muted">Licencias para el acceso general a la app, sin permisos de categorías.</p>
+              <p id="appKeysStatusText" class="notice" role="status">Generador independiente de keys generales.</p>
+            </div>
+            <button id="refreshAppKeysButton" type="button" class="ghost">Actualizar keys</button>
+          </div>
+          <form id="appKeyForm" class="form keyCreateForm">
+            <div class="keyCreateGrid">
+              <label>Cantidad<input id="appKeyQuantityInput" type="number" min="1" max="200" value="1" required /></label>
+              <label>Duración<input id="appKeyDurationInput" type="number" min="0" value="0" /></label>
+              <label>Unidad<select id="appKeyDurationUnitInput"><option value="lifetime">Sin vencimiento</option><option value="hours">Horas</option><option value="days">Días</option><option value="weeks">Semanas</option><option value="months">Meses</option></select></label>
+            </div>
+            <label>Cliente o nota<input id="appKeyLabelInput" type="text" maxlength="80" placeholder="Nombre del cliente" /></label>
+            <label>Key personalizada<input id="appCustomKeyInput" type="text" maxlength="80" placeholder="Opcional: NEXUS-CLIENTE-001" />
+            <span class="fieldHint">Si usas una key personalizada, la cantidad debe ser 1.</span></label>
+            <button id="appCreateKeysButton" type="submit" class="primary">Crear keys normales de la app</button>
+            <div id="appGeneratedKeysBlock" class="generatedKeysBlock hidden"><h3>Keys normales creadas</h3>
+              <textarea id="appGeneratedKeysOutput" rows="4" readonly></textarea>
+              <button id="appCopyGeneratedKeysButton" type="button" class="ghost">Copiar keys</button>
+            </div>
+          </form>
+          <div class="toolbar">
+            <input id="appKeySearchInput" type="search" placeholder="Buscar key normal, cliente o dispositivo..." />
+            <span id="appKeyCounter" class="counter">0 keys</span>
+          </div>
+          <div id="appKeyList" class="fileList"></div>
         </section>
       </section>
     </main>
@@ -343,6 +380,6 @@
       </article>
     </template>
 
-    <script type="module" src="./app.js?v=20261023-secciones-separadas"></script>
+    <script type="module" src="./app.js?v=20261023-cuatro-apartados"></script>
   </body>
 </html>

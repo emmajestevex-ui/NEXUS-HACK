@@ -276,6 +276,12 @@ function bindEvents() {
   els.publishButton.addEventListener("click", publishChanges);
   els.searchInput.addEventListener("input", renderFiles);
   els.refreshKeysButton.addEventListener("click", loadKeys);
+  document.querySelector("#refreshAppKeysButton")?.addEventListener("click", loadKeys);
+  document.querySelector("#appKeyForm")?.addEventListener("submit", createAppKeys);
+  document.querySelector("#appKeySearchInput")?.addEventListener("input", renderAppKeys);
+  document.querySelector("#appCopyGeneratedKeysButton")?.addEventListener("click", copyAppKeys);
+  document.querySelector("#appKeyDurationUnitInput")?.addEventListener("change", syncAppDuration);
+  document.querySelector("#appCustomKeyInput")?.addEventListener("input", syncAppQuantity);
   els.keySearchInput.addEventListener("input", renderKeys);
   document.querySelector("#keyCategoryFilter")?.addEventListener("change", renderKeys);
   document.querySelectorAll("[data-admin-target]").forEach(button => button.addEventListener("click", () => setAdminView(button.dataset.adminTarget)));
@@ -288,6 +294,7 @@ function bindEvents() {
   els.newCategoryButton.addEventListener("click", () => openCategoryEditor());
   els.cancelCategoryButton.addEventListener("click", closeCategoryEditor);
   els.categoryForm.addEventListener("submit", saveCategoryFromForm);
+  els.categoryContentTypeInput.addEventListener("change", syncCategoryKeyEditor);
   els.keyDurationUnitInput.addEventListener("change", syncDurationInput);
   els.customKeyInput.addEventListener("input", syncCustomKeyQuantity);
   els.nameInput.addEventListener("input", () => {
@@ -314,6 +321,7 @@ function bindEvents() {
     updateAssetVariantVisibility();
   });
   renderPresets();
+  syncAppDuration();
   syncDurationInput();
 }
 
@@ -454,11 +462,12 @@ function setSession(session) {
     state.licenses = [];
     renderFiles();
     renderKeys();
+    renderAppKeys();
   }
 }
 
 function setAdminView(target = "patches", updateHash = true) {
-  const view = ["patches", "categories", "keys"].includes(target) ? target : "patches";
+  const view = ["patches", "categories", "keys", "app-keys"].includes(target) ? target : "patches";
   state.activeAdminView = view;
   document.querySelectorAll("[data-admin-view]").forEach(panel => panel.classList.toggle("hidden", panel.dataset.adminView !== view));
   document.querySelectorAll("[data-admin-target]").forEach(button => {
@@ -499,6 +508,7 @@ async function loadKeys() {
     els.keysStatusText.textContent = adminErrorMessage(error);
     state.licenses = [];
     renderKeys();
+    renderAppKeys();
     return;
   }
 
@@ -506,6 +516,7 @@ async function loadKeys() {
   renderCategoryEditor();
   els.keysStatusText.textContent = "Keys cargadas. La activacion se valida en Supabase.";
   renderKeys();
+  renderAppKeys();
 }
 
 const DEFAULT_APP_CONTENT = {
@@ -562,6 +573,21 @@ function categoryContentType(category) {
   const hasChildren = Boolean(category?.id && (state.appContent?.categories || []).some((item) => item.parent_id === category.id));
   if (hasChildren) return "container";
   return value === "text" ? "text" : value === "container" ? "container" : "patch";
+}
+
+function categoryNeedsKey(category) {
+  if (!category || categoryContentType(category) !== "patch") return false;
+  const configured = (state.appContent?.categories || []).find(c => c.id === category.id);
+  const source = configured || category;
+  // Conserva el estado protegido para categorias antiguas sin bandera explicita.
+  return typeof source.requires_key === "boolean" ? source.requires_key : true;
+}
+function syncCategoryKeyEditor() {
+  const field = document.querySelector("#categoryRequireKeyInput");
+  const label = document.querySelector("#categoryKeyLabel");
+  const disabled = els.categoryContentTypeInput.value !== "patch" || state.editorMode === "tab";
+  if (label) label.classList.toggle("hidden", disabled);
+  if (field) field.disabled = disabled;
 }
 
 function categoryById(id) {
@@ -689,7 +715,69 @@ function renderCategoryEditor() {
     renderKeys();
   }));
   els.categoryList.querySelectorAll(".categoryDeleteButton").forEach((button) => button.addEventListener("click", () => deleteCategory(button.dataset.categoryId)));
+  renderCategoryAccessList();
   renderTabEditor();
+}
+
+function renderCategoryAccessList() {
+  const list = document.querySelector("#categoryAccessList");
+  if (!list) return;
+  list.replaceChildren();
+  const all = allCategoryChoices();
+  const categories = all.filter(c => categoryContentType(c) === "patch")
+    .sort((a,b) => categoryPath(a.id,all).localeCompare(categoryPath(b.id,all),"es"));
+  if (!categories.length) {
+    const message = document.createElement("p");
+    message.className = "muted"; message.textContent = "Todavia no tienes categorias de patches.";
+    list.append(message); return;
+  }
+  for (const cat of categories) {
+    const row = document.createElement("div"); row.className = "categoryAccessRow";
+    const info = document.createElement("div"); info.className = "categoryAccessName";
+    const title = document.createElement("strong"); title.textContent = categoryPath(cat.id, all);
+    const subtitle = document.createElement("small"); subtitle.textContent = "ID: " + cat.id;
+    info.append(title,subtitle);
+    const control = document.createElement("label"); control.className = "categoryAccessToggle";
+    const check = document.createElement("input"); check.type = "checkbox"; check.checked = categoryNeedsKey(cat);
+    const wording = document.createElement("span"); wording.textContent = check.checked ? "Con key" : "Libre (IPA pendiente)";
+    check.addEventListener("change", async () => {
+      check.disabled = true;
+      await updateCategoryAccess(cat, check.checked);
+      check.disabled = false;
+    });
+    control.append(check,wording);
+    row.append(info,control);
+    list.append(row);
+  }
+}
+async function updateCategoryAccess(cat, needsKey) {
+  const status = document.querySelector("#categoryAccessStatus");
+  if (!state.session || state.busy) return;
+  const copy = structuredClone(state.appContent || DEFAULT_APP_CONTENT);
+  copy.categories = Array.isArray(copy.categories) ? copy.categories : [];
+  let configured = copy.categories.find(c => c.id === cat.id);
+  if (!configured) {
+    configured = { id: cat.id, title: cat.title || cat.id, subtitle: cat.subtitle || "",
+      icon: cat.icon || "shippingbox.fill", color: cat.color || "blue",
+      content_type: "patch", parent_id: cat.parent_id || null, sort_order: Number(cat.sort_order || 0) };
+    copy.categories.push(configured);
+  }
+  configured.requires_key = Boolean(needsKey);
+  if (status) status.textContent = "Guardando configuracion en Supabase...";
+  setBusy(true, "Guardando acceso por categoria...");
+  const { error } = await supabaseClient.rpc("admin_update_app_settings", { p_content: copy });
+  setBusy(false);
+  if (error) {
+    if (status) status.textContent = adminErrorMessage(error);
+    renderCategoryAccessList();
+    return;
+  }
+  state.appContent = copy;
+  els.settingsInput.value = JSON.stringify(copy,null,2);
+  renderCategoryEditor();
+  if (status) status.textContent = needsKey
+    ? "Categoria activada con key. Genera claves en Keys de categorias."
+    : "Categoria marcada libre en el panel. La IPA instalada seguira bloqueando sus patches hasta que se actualice.";
 }
 
 function renderTabEditor() {
@@ -740,6 +828,8 @@ function openCategoryEditor(id = "") {
   els.categoryContentTypeInput.closest("label")?.classList.remove("hidden");
   els.categoryParentInput.closest("label")?.classList.remove("hidden");
   els.categoryOrderInput.value = String(category?.sort_order ?? ((state.appContent?.categories || []).length * 10));
+  document.querySelector("#categoryRequireKeyInput").checked = category ? categoryNeedsKey(category) : false;
+  syncCategoryKeyEditor();
   renderCategoryEditor();
   els.categoryParentInput.value = category?.parent_id || "";
   els.categoryNameInput.focus();
@@ -759,6 +849,7 @@ function openTabEditor(id) {
   els.categoryContentTypeInput.closest("label")?.classList.add("hidden");
   els.categoryOrderInput.value = String(tab.sort_order || 0);
   els.categoryParentInput.closest("label")?.classList.add("hidden");
+  document.querySelector("#categoryKeyLabel")?.classList.add("hidden");
   els.categoryIconFileInput.value = "";
   els.categoryNameInput.focus();
 }
@@ -769,6 +860,7 @@ function closeCategoryEditor() {
   els.editingCategoryId.value = "";
   els.categoryParentInput.closest("label")?.classList.remove("hidden");
   els.categoryContentTypeInput.closest("label")?.classList.remove("hidden");
+  syncCategoryKeyEditor();
   renderCategoryEditor();
 }
 
@@ -814,7 +906,7 @@ async function saveCategoryFromForm(event) {
   const parentID = els.categoryParentInput.value || null;
   const parent = content.categories.find((category) => category.id === parentID);
   if (parent) parent.content_type = "container";
-  const item = { id, title: els.categoryNameInput.value.trim(), subtitle: els.categorySubtitleInput.value.trim(), icon: els.categoryIconInput.value.trim() || "square.grid.2x2.fill", icon_url: iconURL, color: els.categoryColorInput.value, content_type: contentType, parent_id: parentID, sort_order: Number(els.categoryOrderInput.value || 0) };
+  const item = { id, title: els.categoryNameInput.value.trim(), subtitle: els.categorySubtitleInput.value.trim(), icon: els.categoryIconInput.value.trim() || "square.grid.2x2.fill", icon_url: iconURL, color: els.categoryColorInput.value, content_type: contentType, parent_id: parentID, sort_order: Number(els.categoryOrderInput.value || 0), requires_key: contentType === "patch" && document.querySelector("#categoryRequireKeyInput").checked };
   const index = content.categories.findIndex((category) => category.id === els.editingCategoryId.value);
   if (index >= 0) content.categories[index] = item;
   else content.categories.push(item);
@@ -884,8 +976,8 @@ async function createKeys(event) {
   const durationHours = durationToHours(els.keyDurationInput.value, els.keyDurationUnitInput.value);
   const label = els.keyLabelInput.value.trim();
   const categoryID = els.keyContentInput.value.trim().toLowerCase();
-  if (!categoryID) {
-    els.keysStatusText.textContent = "Selecciona la categoría que quieres desbloquear.";
+  if (!categoryID || !allCategoryChoices().some(c => c.id === categoryID && categoryNeedsKey(c))) {
+    els.keysStatusText.textContent = "Selecciona una categoría activada Con key.";
     return;
   }
   const capabilities = els.specialAssetIndexerInput.checked ? ["special_assetindexer"] : [];
@@ -923,10 +1015,76 @@ async function createKeys(event) {
   }
 }
 
+function appKeysOf(licenses = state.licenses) {
+  return licenses.filter(license => !(Array.isArray(license.capabilities) ? license.capabilities : [])
+    .some(cap => typeof cap === "string" && cap.startsWith("category:")));
+}
+
+function syncAppDuration() {
+  const unit = document.querySelector("#appKeyDurationUnitInput");
+  const input = document.querySelector("#appKeyDurationInput");
+  if (!unit || !input) return;
+  input.disabled = unit.value === "lifetime";
+  if (input.disabled) input.value = "0";
+}
+function syncAppQuantity() {
+  const custom = document.querySelector("#appCustomKeyInput");
+  const quantity = document.querySelector("#appKeyQuantityInput");
+  if (!custom || !quantity) return;
+  quantity.disabled = Boolean(custom.value.trim());
+  if (quantity.disabled) quantity.value = "1";
+}
+async function createAppKeys(event) {
+  event.preventDefault();
+  const get = id => document.querySelector("#" + id);
+  const status = get("appKeysStatusText");
+  const create = get("appCreateKeysButton");
+  const custom = get("appCustomKeyInput").value.trim().toUpperCase();
+  if (custom && !custom.startsWith("NEXUS-")) {
+    status.textContent = "La key personalizada debe empezar con NEXUS-."; return;
+  }
+  const quantity = custom ? 1 : clampNumber(get("appKeyQuantityInput").value, 1, 200);
+  const duration = durationToHours(get("appKeyDurationInput").value, get("appKeyDurationUnitInput").value);
+  create.disabled = true;
+  status.textContent = "Generando keys normales en Supabase...";
+  try {
+    const { data, error } = await supabaseClient.rpc("admin_generate_licenses", {
+      p_quantity: quantity,
+      p_duration_hours: duration,
+      p_label: get("appKeyLabelInput").value.trim() || null,
+      p_capabilities: [],
+      p_custom_license_key: custom || null,
+    });
+    if (error || data?.success === false) throw error || new Error(data?.message || "No se pudieron generar las keys.");
+    const keys = Array.isArray(data?.keys) ? data.keys : [];
+    get("appGeneratedKeysOutput").value = keys.join("\n");
+    get("appGeneratedKeysBlock").classList.toggle("hidden", !keys.length);
+    status.textContent = keys.length + (keys.length === 1 ? " key normal creada." : " keys normales creadas.");
+    get("appCustomKeyInput").value = "";
+    syncAppQuantity();
+    await loadKeys();
+  } catch (error) {
+    status.textContent = adminErrorMessage(error);
+  } finally {
+    create.disabled = false;
+  }
+}
+async function copyAppKeys() {
+  const input = document.querySelector("#appGeneratedKeysOutput");
+  if (!input?.value.trim()) return;
+  try {
+    await navigator.clipboard.writeText(input.value.trim());
+    document.querySelector("#appKeysStatusText").textContent = "Keys normales copiadas.";
+  } catch {
+    input.select();
+    document.execCommand("copy");
+  }
+}
+
 function refreshKeyContentOptions() {
   if (!els.keyContentInput) return;
   const selected = els.keyContentInput.value;
-  const categories = allCategoryChoices().filter(cat => categoryContentType(cat) === "patch");
+  const categories = allCategoryChoices().filter(cat => categoryContentType(cat) === "patch" && categoryNeedsKey(cat));
   els.keyContentInput.replaceChildren(new Option("Selecciona categoría", ""));
   for (const cat of categories) {
     els.keyContentInput.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
@@ -944,9 +1102,9 @@ function refreshKeyContentOptions() {
   const filter = document.querySelector("#keyCategoryFilter");
   if (filter) {
     const selectedCategoryFilter = filter.value;
-    filter.replaceChildren(new Option("Todas las categorías", ""), new Option("Keys antiguas / sin categoría", "__legacy__"));
+    filter.replaceChildren(new Option("Todas las categorías protegidas", ""));
     for (const cat of categories) filter.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
-    if (categories.some(cat => cat.id === selectedCategoryFilter) || selectedCategoryFilter === "__legacy__") filter.value = selectedCategoryFilter;
+    if (categories.some(cat => cat.id === selectedCategoryFilter)) filter.value = selectedCategoryFilter;
   }
   const pwdSelect = document.querySelector("#passwordCategorySelect");
   if (pwdSelect) {
@@ -1132,7 +1290,7 @@ async function saveFile(event) {
       p_storage_path: storagePath,
       p_content_type: contentType,
       p_text_content: contentType === "text" ? textBody : null,
-      p_requires_key: true,
+      p_requires_key: contentType === "patch" && categoryNeedsKey(selectedCategory),
       p_price_usd: Math.max(0.01, Number(els.priceUSDInput.value || 15)),
       p_force_new: !isReplacing,
     });
@@ -1495,6 +1653,47 @@ function renderFiles() {
   }
 }
 
+function renderAppKeys() {
+  const list = document.querySelector("#appKeyList");
+  const counter = document.querySelector("#appKeyCounter");
+  const query = document.querySelector("#appKeySearchInput")?.value.trim().toLowerCase() || "";
+  if (!list || !counter) return;
+  const licenses = appKeysOf().filter(license => !query ||
+    [license.license_key, license.label, license.status, license.device_id, license.device_model]
+      .filter(Boolean).some(value => String(value).toLowerCase().includes(query)));
+  counter.textContent = licenses.length + (licenses.length === 1 ? " key normal" : " keys normales");
+  list.replaceChildren();
+  if (!licenses.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No hay keys normales para mostrar.";
+    list.append(empty);
+    return;
+  }
+  for (const license of licenses) {
+    const node = els.keyTemplate.content.firstElementChild.cloneNode(true);
+    node.querySelector("h3").textContent = license.license_key;
+    node.querySelector(".fileMeta").textContent = [
+      "Key normal de la app",
+      "Estado: " + licenseStatusLabel(license),
+      license.label ? "Nota: " + license.label : null,
+      license.expires_at ? "Expira: " + formatDate(license.expires_at) : "Sin expiración"
+    ].filter(Boolean).join(" / ");
+    node.querySelector(".filePath").textContent =
+      "Dispositivo: " + (license.device_model || "No activado") +
+      " · Última actividad: " + formatDate(license.last_checked_at || license.used_at);
+    node.querySelector(".fileHash").textContent = "Device ID: " + (license.device_id || "Sin vincular");
+    const badge = node.querySelector(".badge");
+    badge.textContent = licenseStatusLabel(license);
+    badge.classList.toggle("inactive", !["available", "active"].includes(license.status));
+    badge.classList.toggle("pending", license.status === "available");
+    const reset = node.querySelector(".resetDeviceButton");
+    reset.disabled = !license.device_id || state.busy;
+    reset.addEventListener("click", () => resetLicenseDevice(license));
+    list.append(node);
+  }
+}
+
 function renderKeys() {
   if (!els.keyList) return;
   const query = els.keySearchInput.value.trim().toLowerCase();
@@ -1502,7 +1701,8 @@ function renderKeys() {
   const licenses = state.licenses.filter((license) => {
     const capabilities = Array.isArray(license.capabilities) ? license.capabilities : [];
     const categoryIDs = capabilities.filter(capability => typeof capability === "string" && capability.startsWith("category:")).map(capability => capability.slice(9));
-    if (categoryFilter && (categoryFilter === "__legacy__" ? categoryIDs.length > 0 : !categoryIDs.includes(categoryFilter))) return false;
+    if (!categoryIDs.length) return false;
+    if (categoryFilter && !categoryIDs.includes(categoryFilter)) return false;
     if (!query) return true;
     return [
       license.license_key,
