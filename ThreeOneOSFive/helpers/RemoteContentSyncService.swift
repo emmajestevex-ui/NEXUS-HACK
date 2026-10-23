@@ -68,7 +68,7 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         byteSize = (try? container.decode(Int64.self, forKey: .byteSize)) ?? 0
         sha256 = ((try? container.decode(String.self, forKey: .sha256)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         storagePath = ((try? container.decode(String.self, forKey: .storagePath)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        requiresKey = contentType != "text" // Bloqueo por categoría de todos los patches, incluso los antiguos
+        requiresKey = (try? container.decode(Bool.self, forKey: .requiresKey)) ?? (contentType != "text")
         priceUSD = (try? container.decode(Double.self, forKey: .priceUSD)) ?? 15.0
         isActive = (try? container.decode(Bool.self, forKey: .isActive)) ?? true
         deletedAt = try? container.decodeIfPresent(String.self, forKey: .deletedAt)
@@ -225,9 +225,10 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
     let contentType: String
     let parentID: String?
     let sortOrder: Int
+    let requiresKey: Bool
 
     enum CodingKeys: String, CodingKey {
-        case id, title, subtitle, icon, color
+        case id, title, subtitle, icon, color, requiresKey = "requires_key"
         case legacyType = "type"
         case contentType = "content_type"
         case parentID = "parent_id"
@@ -247,6 +248,7 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
         contentType = rawContentType == "text" ? "text" : (rawContentType == "container" ? "container" : "patch")
         parentID = try? c.decodeIfPresent(String.self, forKey: .parentID)
         sortOrder = (try? c.decode(Int.self, forKey: .sortOrder)) ?? 0
+        requiresKey = (try? c.decode(Bool.self, forKey: .requiresKey)) ?? (contentType == "patch")
     }
 
     func encode(to encoder: Encoder) throws {
@@ -260,6 +262,7 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
         try c.encode(contentType, forKey: .contentType)
         try c.encodeIfPresent(parentID, forKey: .parentID)
         try c.encode(sortOrder, forKey: .sortOrder)
+        try c.encode(requiresKey, forKey: .requiresKey)
     }
 
     var isTextCategory: Bool {
@@ -361,6 +364,15 @@ struct NexusAppContent: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey { case title, subtitle, announcement, categories, socials, tabs }
+
+    // One authoritative category setting applies to every patch inside it.
+    // Legacy categories retain their existing locked behavior until explicitly set free.
+    func categoryRequiresKey(_ id: String, fallback: Bool = true) -> Bool {
+        guard let category = categories.first(where: { $0.id.caseInsensitiveCompare(id) == .orderedSame }) else {
+            return fallback
+        }
+        return category.contentType == "patch" && category.requiresKey
+    }
 }
 
 struct RemoteContentManifest: Codable, Equatable {
@@ -623,6 +635,7 @@ final class RemoteContentStore: ObservableObject {
     private let session: URLSession
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
+    private var syncingContent: NexusAppContent = .empty
     private let minimumAutomaticInterval: TimeInterval = 10 * 60
     private var lastAutomaticAttempt: Date?
 
@@ -654,6 +667,10 @@ final class RemoteContentStore: ObservableObject {
         remoteVersion = manifest.version
     }
 
+    func requiresKey(for file: RemoteContentFile) -> Bool {
+        appContent.categoryRequiresKey(file.category, fallback: file.requiresKey)
+    }
+
     func syncIfPossible(force: Bool = false) {
         loadLocalState()
         guard !isBusy else { return }
@@ -676,6 +693,7 @@ final class RemoteContentStore: ObservableObject {
 
         do {
             let manifest = try await fetchManifest()
+            syncingContent = manifest.appContent
             try validate(manifest)
             let localManifest = try? loadLocalManifest()
             let plan = try makePlan(remote: manifest, local: localManifest)
@@ -854,7 +872,7 @@ final class RemoteContentStore: ObservableObject {
         var changed: [RemoteContentFile] = []
 
         for file in remoteFiles {
-            if file.requiresKey && !ContentLicenseStore.hasAccess(category: file.category) {
+            if remote.appContent.categoryRequiresKey(file.category, fallback: file.requiresKey) && !ContentLicenseStore.hasAccess(category: file.category) {
                 // Keep protected metadata visible, but never download a
                 // payload until the individual grant is present.
                 continue
@@ -882,7 +900,7 @@ final class RemoteContentStore: ObservableObject {
         let obsolete = localFiles.filter { file in
             !remoteIDs.contains(file.id)
                 || explicitlyDeletedIDs.contains(file.id)
-                || (file.requiresKey && !ContentLicenseStore.hasAccess(category: file.category))
+                || (remote.appContent.categoryRequiresKey(file.category, fallback: file.requiresKey) && !ContentLicenseStore.hasAccess(category: file.category))
         }
 
         log(
@@ -899,8 +917,8 @@ final class RemoteContentStore: ObservableObject {
     }
 
     private func download(_ file: RemoteContentFile, into stagingRoot: URL) async throws -> URL {
-        guard !file.requiresKey || ContentLicenseStore.hasAccess(category: file.category) else {
-            throw RemoteContentSyncError.server("Esta categoría requiere una key y contraseña.")
+        guard !syncingContent.categoryRequiresKey(file.category, fallback: file.requiresKey) || ContentLicenseStore.hasAccess(category: file.category) else {
+            throw RemoteContentSyncError.server("Esta categoría requiere una key válida.")
         }
         let sourceURL = try objectURL(for: file.storagePath)
         var request = URLRequest(url: sourceURL)
