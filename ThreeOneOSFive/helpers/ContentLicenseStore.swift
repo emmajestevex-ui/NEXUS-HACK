@@ -19,14 +19,14 @@ enum ContentLicenseStore {
         guardLock.unlock()
     }
 
-    static func activate(key: String, fileID: String, category: String, password: String) async throws -> String {
+    static func activate(key: String, fileID: String, category: String) async throws -> String {
         guard let contentID = UUID(uuidString: fileID), !category.isEmpty else {
             throw ContentLicenseError.invalidFile
         }
         let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !normalized.isEmpty else { throw ContentLicenseError.invalidKey }
         var components = URLComponents(url: SupabaseLicenseConfig.projectURL, resolvingAgainstBaseURL: false)
-        components?.path = "/rest/v1/rpc/activate_nexus_category"
+        components?.path = "/rest/v1/rpc/activate_nexus_category_key"
         guard let url = components?.url else { throw ContentLicenseError.badURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -37,12 +37,11 @@ enum ContentLicenseStore {
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "p_license_key": normalized,
             "p_device_id": UserDefaults.standard.string(forKey: "greeg.license.device") ?? "",
-            "p_content_id": contentID.uuidString,
-            "p_password": password
+            "p_content_id": contentID.uuidString
         ])
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw ContentLicenseError.server("No se pudo validar la categoría. Ejecuta primero el SQL V2 en Supabase.")
+            throw ContentLicenseError.server("No se pudo validar la categoría. Ejecuta primero el SQL NEXUS V3 en Supabase.")
         }
         let result = try JSONDecoder().decode(ContentLicenseResponse.self, from: data)
         guard result.success else { throw ContentLicenseError.server(result.message) }
