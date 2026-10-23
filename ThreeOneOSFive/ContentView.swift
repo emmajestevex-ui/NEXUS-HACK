@@ -707,6 +707,7 @@ private struct GreegHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var logoIsBreathing = false
     @State private var heroRingRotation = 0.0
+    @State private var showingAnnouncementDetail = false
 
     var body: some View {
         NavigationStack {
@@ -975,15 +976,42 @@ private struct GreegHomeView: View {
     }
 
     private func announcementCard(_ announcement: NexusAppAnnouncement) -> some View {
-        GreegPanel {
-            HStack(alignment: .top, spacing: 12) {
-                AppRowIcon(systemName: announcement.icon, tint: themeColor(announcement.color), symbolSize: 17, frameSize: 42)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(announcement.title).font(.headline.weight(.bold))
-                    Text(announcement.body).font(.subheadline).foregroundStyle(.secondary)
+        Button {
+            showingAnnouncementDetail = true
+        } label: {
+            GreegPanel {
+                HStack(alignment: .top, spacing: 12) {
+                    AppRowIcon(systemName: announcement.icon, tint: themeColor(announcement.color), symbolSize: 17, frameSize: 42)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(announcement.title).font(.headline.weight(.bold))
+                        Text(announcement.body)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
+                        Text("Toca para leer el anuncio completo")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(NexusTheme.blueBright)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(NexusTheme.blueBright)
                 }
-                Spacer(minLength: 0)
             }
+        }
+        .buttonStyle(NexusPressStyle())
+        .accessibilityLabel("Leer anuncio completo: \(announcement.title)")
+        .sheet(isPresented: $showingAnnouncementDetail) {
+            NexusFullTextDetailView(
+                title: announcement.title,
+                bodyText: announcement.body,
+                section: "Anuncio de NEXUS",
+                icon: announcement.icon,
+                tint: themeColor(announcement.color)
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -1108,11 +1136,67 @@ private struct RemoteSocialRow: View {
     }
 }
 
+/// Reader shared by announcements and tutorials. It preserves the complete
+/// published text, including paragraphs, instead of restricting it to a card preview.
+private struct NexusFullTextDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    let bodyText: String
+    let section: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    GreegPanel {
+                        HStack(alignment: .top, spacing: 12) {
+                            NexusIconTile(systemName: icon, tint: tint, size: 48)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(section.uppercased())
+                                    .font(.caption.weight(.black))
+                                    .foregroundStyle(tint)
+                                    .tracking(1)
+                                Text(title)
+                                    .font(.title2.weight(.bold))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    GreegPanel {
+                        Text(bodyText.isEmpty ? "No hay contenido publicado." : bodyText)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .lineSpacing(7)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 40)
+            }
+            .background(NexusBackground { Color.clear }.ignoresSafeArea())
+            .navigationTitle("Lectura completa")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cerrar") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
 private struct RemoteFileMiniRow: View {
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
     @State private var isWorking = false
     @State private var actionAlert: GreegPatchActionAlert?
     @State private var showKeySheet = false
+    @State private var showingFullText = false
     let file: RemoteContentFile
     let tint: Color
 
@@ -1127,6 +1211,13 @@ private struct RemoteFileMiniRow: View {
 
     private var hasFileAccess: Bool {
         !remoteContentStore.requiresKey(for: file) || ContentLicenseStore.hasAccess(category: file.category)
+    }
+
+    private var readableText: String {
+        let fullText = file.textContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !fullText.isEmpty { return fullText }
+        let description = file.description?.nexusCleanDescription.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return description.isEmpty ? "Este tutorial todavía no tiene texto publicado." : description
     }
 
     var body: some View {
@@ -1145,13 +1236,16 @@ private struct RemoteFileMiniRow: View {
             Spacer()
             if file.isTextContent {
                 Button {
-                    if hasFileAccess { return }
-                    showKeySheet = true
+                    showingFullText = true
                 } label: {
-                    Image(systemName: hasFileAccess ? "doc.text.fill" : "lock.fill")
+                    Image(systemName: "arrow.up.right.square.fill")
+                        .font(.headline)
                         .foregroundStyle(tint)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Leer \(file.name) completo")
             } else {
                 Button(action: { hasFileAccess ? togglePatch() : (showKeySheet = true) }) {
                     HStack(spacing: 5) {
@@ -1178,6 +1272,21 @@ private struct RemoteFileMiniRow: View {
             }
         }
         .padding(.vertical, 5)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if file.isTextContent { showingFullText = true }
+        }
+        .sheet(isPresented: $showingFullText) {
+            NexusFullTextDetailView(
+                title: file.name,
+                bodyText: readableText,
+                section: "Tutorial de NEXUS",
+                icon: "doc.text.fill",
+                tint: tint
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showKeySheet) {
             ContentKeyUnlockView(file: file) {
                 remoteContentStore.syncIfPossible(force: true)
