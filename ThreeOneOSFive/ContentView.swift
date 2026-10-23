@@ -1002,7 +1002,7 @@ private struct GreegHomeView: View {
         }
         .buttonStyle(NexusPressStyle())
         .accessibilityLabel("Leer anuncio completo: \(announcement.title)")
-        .sheet(isPresented: $showingAnnouncementDetail) {
+        .fullScreenCover(isPresented: $showingAnnouncementDetail) {
             NexusFullTextDetailView(
                 title: announcement.title,
                 bodyText: announcement.body,
@@ -1010,8 +1010,6 @@ private struct GreegHomeView: View {
                 icon: announcement.icon,
                 tint: themeColor(announcement.color)
             )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
         }
     }
 
@@ -1220,32 +1218,39 @@ private struct RemoteFileMiniRow: View {
         return description.isEmpty ? "Este tutorial todavía no tiene texto publicado." : description
     }
 
-    var body: some View {
+    // The whole tutorial card is tappable. Patch actions stay independent.
+    private var rowContent: some View {
         HStack(spacing: 12) {
             RemoteFileArtwork(file: file, tint: tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(file.name).font(.headline.weight(.bold)).lineLimit(1)
-                if file.isTextContent, let textContent = file.textContent?.trimmingCharacters(in: .whitespacesAndNewlines), !textContent.isEmpty {
-                    Text(textContent)
-                        .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
-                } else {
-                    Text(file.description?.nexusCleanDescription ?? "Disponible después de sincronizar")
-                        .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(file.name)
+                    .font(.headline.weight(.bold))
+                    .lineLimit(file.isTextContent ? 2 : 1)
+                    .multilineTextAlignment(.leading)
+
+                Text(file.isTextContent
+                     ? readableText
+                     : (file.description?.nexusCleanDescription ?? "Disponible después de sincronizar"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                if file.isTextContent {
+                    Label("Leer tutorial completo", systemImage: "book.pages.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(NexusTheme.blueBright)
                 }
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             if file.isTextContent {
-                Button {
-                    showingFullText = true
-                } label: {
-                    Image(systemName: "arrow.up.right.square.fill")
-                        .font(.headline)
-                        .foregroundStyle(tint)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Leer \(file.name) completo")
+                Image(systemName: "chevron.right")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(NexusTheme.blueBright)
+                    .frame(width: 26, height: 44)
+                    .accessibilityHidden(true)
             } else {
                 Button(action: { hasFileAccess ? togglePatch() : (showKeySheet = true) }) {
                     HStack(spacing: 5) {
@@ -1271,12 +1276,26 @@ private struct RemoteFileMiniRow: View {
                 .disabled(isWorking)
             }
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, 8)
         .contentShape(Rectangle())
-        .onTapGesture {
-            if file.isTextContent { showingFullText = true }
+    }
+
+    var body: some View {
+        Group {
+            if file.isTextContent {
+                Button {
+                    showingFullText = true
+                } label: {
+                    rowContent
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Leer tutorial completo: \(file.name)")
+                .accessibilityHint("Abre el texto completo en una pantalla de lectura")
+            } else {
+                rowContent
+            }
         }
-        .sheet(isPresented: $showingFullText) {
+        .fullScreenCover(isPresented: $showingFullText) {
             NexusFullTextDetailView(
                 title: file.name,
                 bodyText: readableText,
@@ -1284,8 +1303,6 @@ private struct RemoteFileMiniRow: View {
                 icon: "doc.text.fill",
                 tint: tint
             )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showKeySheet) {
             ContentKeyUnlockView(file: file) {
