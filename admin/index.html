@@ -109,6 +109,11 @@
               Descripcion
               <textarea id="descriptionInput" rows="3" placeholder="Nota interna opcional"></textarea>
             </label>
+            <label class="checkLabel" id="securePatchUploadLabel">
+              <input id="securePatchUpload" type="checkbox" checked />
+              Cifrar el patch (AES-256-GCM)
+              <span class="fieldHint">Necesita Supabase Edge Function nexus-secure-patch. Las claves de cifrado no se incluyen en la IPA.</span>
+            </label>
             <div class="patchAccessNote">
               <input id="requiresKeyInput" type="checkbox" checked hidden />
               <span>Este patch utiliza la categoría seleccionada. Las keys y el acceso se gestionan en las pestañas <b>Categorías</b> y <b>Keys por categoría</b>.</span>
@@ -373,6 +378,6 @@
       </article>
     </template>
 
-    <script type="module" src="./app.js?v=20261023-categoria-ipav3"></script>
+    <script type="module" src="./app.js?v=20261023-secure-patches"></script>
   </body>
 </html>
