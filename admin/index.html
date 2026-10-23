@@ -95,7 +95,7 @@
               <span class="fieldHint">PEN usa Free Fire Max. U6 usa Free Fire normal. El panel cambia la ruta y la app destino automaticamente.</span>
             </label>
             <label>
-              Ruta en NEXUS HACK
+              Ruta en NEXUS
               <input id="targetPathInput" type="text" maxlength="180" placeholder="patches/mi-patch.bundle" required />
               <span class="fieldHint">Elige la app destino y la ruta exacta. Con Nuevo se crea otro patch; con Reemplazar se actualiza solo el elegido.</span>
             </label>
@@ -105,8 +105,8 @@
             </label>
             <label class="checkLabel">
               <input id="requiresKeyInput" type="checkbox" checked />
-              Proteger este archivo con key individual
-              <span class="fieldHint">La app no descargará ni aplicará el archivo hasta validar su key en el servidor.</span>
+              Requerir key y contraseña de su categoría
+              <span class="fieldHint">Una key desbloquea todos los archivos de esta categoría. Las categorías requieren contraseña configurada desde este panel.</span>
             </label>
             <label>
               Precio de referencia (USD)
@@ -201,6 +201,14 @@
               <div class="categoryFormActions"><button id="cancelCategoryButton" class="ghost" type="button">Cancelar</button><button class="primary" type="submit">Guardar categoría</button></div>
             </form>
             <div id="categoryList" class="categoryList"></div>
+<div class="categoryPasswordBox">
+                <h3>Contraseña de acceso por categoría</h3>
+                <p class="muted">Obligatoria para cada categoría con patches; se guarda como hash en Supabase, nunca en la página ni en el manifiesto.</p>
+                <label>Categoría<select id="passwordCategorySelect"></select></label>
+                <label>Nueva contraseña (mínimo 12 caracteres)<input id="categoryAccessPassword" type="password" minlength="12" maxlength="128" autocomplete="new-password" /></label>
+                <button id="saveCategoryPassword" type="button" class="primary">Guardar contraseña de categoría</button>
+                <p id="categoryPasswordStatus" class="notice" role="status"></p>
+              </div>
             <div class="visualEditorHeader tabEditorHeader">
               <div><h3>Pestañas inferiores</h3><p class="muted">Estas son Inicio, Archivos, Instalación, Redes y las nuevas categorías.</p></div>
             </div>
@@ -248,9 +256,9 @@
             <label>
               Patch autorizado
               <select id="keyContentInput">
-                <option value="">Key general / sin patch específico</option>
+                <option value="">Selecciona una categoría</option>
               </select>
-              <span class="fieldHint">La key quedará limitada al patch elegido. Precio de referencia: $15.00 USD.</span>
+              <span class="fieldHint">La key desbloqueará todos los patches de la categoría elegida. Precio de referencia: $15.00 USD.</span>
             </label>
             <label>
               Key personalizada

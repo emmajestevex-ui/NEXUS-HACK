@@ -1,31 +1,33 @@
 import Foundation
 import Security
 
-/// Per-file grants are deliberately kept separate from the membership key.
-/// The IPA never contains a master password; Supabase decides whether a key
-/// can unlock a specific remote file on this device.
+/// Access is per category and lasts only during this app process.
+/// Avoid persisting a naked boolean that survives a revoke/restart.
 enum ContentLicenseStore {
-    private static let prefix = "nexus.content.license."
+    private static let guardLock = NSLock()
+    private static var unlockedCategories = Set<String>()
 
-    static func hasAccess(fileID: String, defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: prefix + fileID.lowercased())
+    static func hasAccess(category: String) -> Bool {
+        guardLock.lock()
+        defer { guardLock.unlock() }
+        return unlockedCategories.contains(category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
     }
 
-    static func grant(fileID: String, defaults: UserDefaults = .standard) {
-        defaults.set(true, forKey: prefix + fileID.lowercased())
+    private static func grant(category: String) {
+        guardLock.lock()
+        unlockedCategories.insert(category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        guardLock.unlock()
     }
 
-    static func activate(key: String, fileID: String) async throws -> String {
-        guard let contentID = UUID(uuidString: fileID) else {
+    static func activate(key: String, fileID: String, category: String, password: String) async throws -> String {
+        guard let contentID = UUID(uuidString: fileID), !category.isEmpty else {
             throw ContentLicenseError.invalidFile
         }
         let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !normalized.isEmpty else { throw ContentLicenseError.invalidKey }
-
         var components = URLComponents(url: SupabaseLicenseConfig.projectURL, resolvingAgainstBaseURL: false)
-        components?.path = "/rest/v1/rpc/activate_content_license"
+        components?.path = "/rest/v1/rpc/activate_nexus_category"
         guard let url = components?.url else { throw ContentLicenseError.badURL }
-
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 25
@@ -35,16 +37,16 @@ enum ContentLicenseStore {
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "p_license_key": normalized,
             "p_device_id": UserDefaults.standard.string(forKey: "greeg.license.device") ?? "",
-            "p_content_id": contentID.uuidString
+            "p_content_id": contentID.uuidString,
+            "p_password": password
         ])
-
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw ContentLicenseError.server("La key no fue aceptada por el servidor.")
+            throw ContentLicenseError.server("No se pudo validar la categoría. Ejecuta primero el SQL V2 en Supabase.")
         }
         let result = try JSONDecoder().decode(ContentLicenseResponse.self, from: data)
         guard result.success else { throw ContentLicenseError.server(result.message) }
-        grant(fileID: fileID)
+        grant(category: category)
         return result.message
     }
 }
@@ -59,11 +61,10 @@ enum ContentLicenseError: LocalizedError {
     case invalidKey
     case badURL
     case server(String)
-
     var errorDescription: String? {
         switch self {
-        case .invalidFile: return "El archivo protegido no tiene un identificador válido."
-        case .invalidKey: return "Escribe una key válida."
+        case .invalidFile: return "Este archivo no tiene una categoría válida."
+        case .invalidKey: return "Escribe una key válida para esta categoría."
         case .badURL: return "No se pudo preparar la conexión segura."
         case .server(let message): return message
         }

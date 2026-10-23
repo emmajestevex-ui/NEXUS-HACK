@@ -1082,7 +1082,7 @@ private struct RemoteFileMiniRow: View {
     }
 
     private var hasFileAccess: Bool {
-        !file.requiresKey || ContentLicenseStore.hasAccess(fileID: file.id)
+        !file.requiresKey || ContentLicenseStore.hasAccess(category: file.category)
     }
 
     var body: some View {
@@ -1174,7 +1174,7 @@ private struct RemoteFileMiniRow: View {
         let project = PatchProject(
             id: projectID,
             name: file.name,
-            author: "NEXUS HACK [REMOTE]",
+            author: "NEXUS [REMOTE]",
             bundleIdentifiers: [file.targetBundleID],
             rules: [PatchRule(
                 bundleID: file.targetBundleID,
@@ -1241,6 +1241,7 @@ private struct ContentKeyUnlockView: View {
     let file: RemoteContentFile
     let onUnlocked: () -> Void
     @State private var key = ""
+    @State private var categoryPassword = ""
     @State private var message = ""
     @State private var isLoading = false
 
@@ -1248,15 +1249,20 @@ private struct ContentKeyUnlockView: View {
         NavigationStack {
             Form {
                 Section {
-                    Text(file.name).font(.headline)
-                    Text("Este contenido está protegido. Precio de referencia: $\(file.priceUSD, specifier: "%.2f") USD.")
+                    Text("Categoría: \(file.category)").font(.headline)
+                    Text("La key desbloquea todos los patches de esta categoría. Precio de referencia: $\(file.priceUSD, specifier: "%.2f") USD.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                Section("Key de acceso") {
+                Section("Key de categoría") {
                     SecureField("NEXUS-XXXX-XXXX", text: $key)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
+                    SecureField("Contraseña de la categoría", text: $categoryPassword)
+                        .textContentType(.password)
+                        .autocorrectionDisabled()
+                    Text("Esta contraseña la configura el administrador y es diferente de la key.")
+                        .font(.caption).foregroundStyle(.secondary)
                     if !message.isEmpty {
                         Text(message).font(.footnote).foregroundStyle(.red)
                     }
@@ -1265,7 +1271,7 @@ private struct ContentKeyUnlockView: View {
                     } label: {
                         HStack {
                             Spacer()
-                            if isLoading { ProgressView() } else { Text("Desbloquear patch") }
+                            if isLoading { ProgressView() } else { Text("Desbloquear categoría") }
                             Spacer()
                         }
                     }
@@ -1287,7 +1293,7 @@ private struct ContentKeyUnlockView: View {
         message = ""
         Task {
             do {
-                _ = try await ContentLicenseStore.activate(key: key, fileID: file.id)
+                _ = try await ContentLicenseStore.activate(key: key, fileID: file.id, category: file.category, password: categoryPassword)
                 await MainActor.run {
                     onUnlocked()
                     dismiss()

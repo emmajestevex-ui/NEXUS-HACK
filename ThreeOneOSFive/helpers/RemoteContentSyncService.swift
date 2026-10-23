@@ -68,7 +68,7 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         byteSize = (try? container.decode(Int64.self, forKey: .byteSize)) ?? 0
         sha256 = ((try? container.decode(String.self, forKey: .sha256)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         storagePath = ((try? container.decode(String.self, forKey: .storagePath)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        requiresKey = (try? container.decode(Bool.self, forKey: .requiresKey)) ?? true
+        requiresKey = contentType != "text" // Bloqueo por categoría de todos los patches, incluso los antiguos
         priceUSD = (try? container.decode(Double.self, forKey: .priceUSD)) ?? 15.0
         isActive = (try? container.decode(Bool.self, forKey: .isActive)) ?? true
         deletedAt = try? container.decodeIfPresent(String.self, forKey: .deletedAt)
@@ -854,7 +854,7 @@ final class RemoteContentStore: ObservableObject {
         var changed: [RemoteContentFile] = []
 
         for file in remoteFiles {
-            if file.requiresKey && !ContentLicenseStore.hasAccess(fileID: file.id) {
+            if file.requiresKey && !ContentLicenseStore.hasAccess(category: file.category) {
                 // Keep protected metadata visible, but never download a
                 // payload until the individual grant is present.
                 continue
@@ -882,7 +882,7 @@ final class RemoteContentStore: ObservableObject {
         let obsolete = localFiles.filter { file in
             !remoteIDs.contains(file.id)
                 || explicitlyDeletedIDs.contains(file.id)
-                || (file.requiresKey && !ContentLicenseStore.hasAccess(fileID: file.id))
+                || (file.requiresKey && !ContentLicenseStore.hasAccess(category: file.category))
         }
 
         log(
@@ -899,8 +899,8 @@ final class RemoteContentStore: ObservableObject {
     }
 
     private func download(_ file: RemoteContentFile, into stagingRoot: URL) async throws -> URL {
-        guard !file.requiresKey || ContentLicenseStore.hasAccess(fileID: file.id) else {
-            throw RemoteContentSyncError.server("Este archivo requiere una key individual.")
+        guard !file.requiresKey || ContentLicenseStore.hasAccess(category: file.category) else {
+            throw RemoteContentSyncError.server("Esta categoría requiere una key y contraseña.")
         }
         let sourceURL = try objectURL(for: file.storagePath)
         var request = URLRequest(url: sourceURL)
@@ -1200,7 +1200,7 @@ enum RemoteContentLibrary {
         for file: RemoteContentFile,
         fileManager: FileManager = .default
     ) -> URL? {
-        guard !file.requiresKey || ContentLicenseStore.hasAccess(fileID: file.id),
+        guard !file.requiresKey || ContentLicenseStore.hasAccess(category: file.category),
               let manifest = loadManifest(fileManager: fileManager),
               let trustedFile = manifest.files.first(where: {
                   $0.id == file.id && $0.cacheRelativePath == file.cacheRelativePath && $0.isAvailable

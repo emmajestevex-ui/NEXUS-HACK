@@ -3,6 +3,7 @@ import UIKit
 import Security
 import Combine
 import AVFoundation
+import WebKit
 
 final class NexusAudioPlayer: NSObject, AVAudioPlayerDelegate {
     static let shared = NexusAudioPlayer()
@@ -364,72 +365,51 @@ class AppState: ObservableObject {
     }
 }
 
+private struct NexusIntroWebView: UIViewRepresentable {
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
+        let web = WKWebView(frame: .zero, configuration: config)
+        web.isOpaque = false
+        web.backgroundColor = .black
+        web.scrollView.isScrollEnabled = false
+        web.scrollView.backgroundColor = .black
+        if let url = Bundle.main.url(forResource: "nexus_intro_animation", withExtension: "html") {
+            web.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        }
+        return web
+    }
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+}
+
 private struct NexusLaunchExperience: View {
     let onFinished: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var ringRotation = 0.0
-    @State private var reveal = false
     @State private var didFinish = false
 
     var body: some View {
-        NexusBackground {
-            VStack(spacing: 18) {
-                ZStack {
-                    Circle()
-                        .stroke(NexusTheme.blue.opacity(0.16), lineWidth: 2)
-                    Circle()
-                        .trim(from: 0.08, to: 0.82)
-                        .stroke(
-                            AngularGradient(colors: [NexusTheme.blue, NexusTheme.blueBright, .white, NexusTheme.blue], center: .center),
-                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(ringRotation))
-                    AppLogo(size: 104)
-                        .shadow(color: NexusTheme.blue.opacity(0.42), radius: 24)
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if reduceMotion {
+                VStack(spacing: 12) {
+                    AppLogo(size: 112)
+                    Text("NEXUS").font(.largeTitle.bold()).foregroundStyle(.white)
                 }
-                .frame(width: 140, height: 140)
-                .scaleEffect(reveal ? 1 : 0.82)
-                .opacity(reveal ? 1 : 0)
-
-                VStack(spacing: 6) {
-                    Text("NEXUS")
-                        .font(.system(size: 31, weight: .black, design: .rounded))
-                        .foregroundStyle(LinearGradient(colors: [.white, NexusTheme.blueBright], startPoint: .leading, endPoint: .trailing))
-                    Text("Preparando tu centro privado")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(NexusTheme.secondaryText)
-                }
-                .opacity(reveal ? 1 : 0)
-                .offset(y: reveal ? 0 : 10)
+            } else {
+                NexusIntroWebView().ignoresSafeArea()
             }
         }
         .onAppear {
+            // Recurso suministrado por el propietario, reproducido una sola vez.
             NexusAudioPlayer.shared.play(named: "nexus_intro")
-            withAnimation(reduceMotion ? nil : .spring(response: 0.55, dampingFraction: 0.82)) {
-                reveal = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0.6 : 4.35)) {
+                guard !didFinish else { return }
+                didFinish = true
+                onFinished()
             }
-
-            guard !reduceMotion else {
-                finish(after: 0.6)
-                return
-            }
-
-            withAnimation(.linear(duration: 2.1).repeatForever(autoreverses: false)) {
-                ringRotation = 360
-            }
-            finish(after: 2.15)
-        }
-    }
-
-    private func finish(after delay: Double) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            guard !didFinish else { return }
-            didFinish = true
-            onFinished()
         }
     }
 }
-
 
 private struct LicenseCheckingView: View {
     var body: some View {

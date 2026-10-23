@@ -43,6 +43,42 @@ enum NexusHaptics {
     }
 }
 
+/// Rayos discretos al fondo; no interceptan toques y respetan Reduce Motion.
+private struct NexusStormBackground: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 15.0)) { timeline in
+            Canvas { context, size in
+                let t = reduceMotion ? 0.0 : timeline.date.timeIntervalSinceReferenceDate
+                for index in 0..<7 {
+                    let seed = Double(index)
+                    let fall = (t * (14.0 + seed * 2.3) + seed * 151.0)
+                        .truncatingRemainder(dividingBy: Double(max(size.height, 1)) + 190)
+                    let top = fall - 160.0
+                    let startX = Double(size.width) * (0.1 + seed * 0.13)
+                    var bolt = Path()
+                    for step in 0...7 {
+                        let y = top + Double(step) * 30
+                        let x = startX + sin(seed * 3.1 + Double(step) * 1.9 + t * 0.22) * 13
+                        let point = CGPoint(x: x, y: y)
+                        if step == 0 { bolt.move(to: point) }
+                        else { bolt.addLine(to: point) }
+                    }
+                    context.stroke(
+                        bolt,
+                        with: .color(NexusTheme.blueBright.opacity(index.isMultiple(of: 2) ? 0.10 : 0.06)),
+                        style: StrokeStyle(lineWidth: 1.1, lineCap: .round, lineJoin: .round)
+                    )
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 struct NexusBackground<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
@@ -60,6 +96,7 @@ struct NexusBackground<Content: View>: View {
             .ignoresSafeArea()
             .allowsHitTesting(false)
 
+            NexusStormBackground()
             content()
         }
     }
@@ -311,7 +348,7 @@ struct AppLogo: View {
 
     var body: some View {
         Group {
-            if let icon = UIImage(named: "AppIcon60x60")
+            if let icon = UIImage(named: "NexusWolfLogo") ?? UIImage(named: "AppIcon60x60")
                 ?? Bundle.main.path(forResource: "AppIcon60x60@2x", ofType: "png").flatMap(UIImage.init(contentsOfFile:))
                 ?? UIImage(named: "AppIcon") {
                 Image(uiImage: icon)

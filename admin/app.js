@@ -276,6 +276,7 @@ function bindEvents() {
   els.refreshKeysButton.addEventListener("click", loadKeys);
   els.keySearchInput.addEventListener("input", renderKeys);
   els.keyForm.addEventListener("submit", createKeys);
+  document.querySelector("#saveCategoryPassword")?.addEventListener("click", saveNexusCategoryPassword);
   els.copyGeneratedKeysButton.addEventListener("click", copyGeneratedKeys);
   els.loadSettingsButton.addEventListener("click", loadSettings);
   els.saveSettingsButton.addEventListener("click", saveSettings);
@@ -486,7 +487,7 @@ async function loadKeys() {
 }
 
 const DEFAULT_APP_CONTENT = {
-  title: "NEXUS HACK",
+  title: "NEXUS",
   subtitle: "Control privado",
   announcement: { title: "Centro NEXUS", body: "Sincroniza para recibir las novedades.", icon: "sparkles", color: "blue" },
   categories: [
@@ -502,7 +503,7 @@ const DEFAULT_APP_CONTENT = {
     { id: "support", title: "Soporte", icon: "headphones.circle.fill", kind: "support", enabled: true, sort_order: 5 }
   ],
   socials: [
-    { title: "Discord", subtitle: "Comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
+    { title: "Discord", subtitle: "Comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
     { title: "TikTok", subtitle: "@tumbado_sensi7", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black" }
   ]
 };
@@ -631,6 +632,7 @@ function updatePackageMode() {
 }
 
 function renderCategoryEditor() {
+  refreshKeyContentOptions();
   const content = state.appContent || DEFAULT_APP_CONTENT;
   const categories = Array.isArray(content.categories) ? content.categories : [];
   els.categoryParentInput.innerHTML = '<option value="">Sin padre</option>' + categories
@@ -848,8 +850,13 @@ async function createKeys(event) {
   const quantity = customKey ? 1 : clampNumber(els.keyQuantityInput.value, 1, 200);
   const durationHours = durationToHours(els.keyDurationInput.value, els.keyDurationUnitInput.value);
   const label = els.keyLabelInput.value.trim();
+  const categoryID = els.keyContentInput.value.trim().toLowerCase();
+  if (!categoryID) {
+    els.keysStatusText.textContent = "Selecciona la categoría que quieres desbloquear.";
+    return;
+  }
   const capabilities = els.specialAssetIndexerInput.checked ? ["special_assetindexer"] : [];
-  if (els.keyContentInput.value) capabilities.push(`content:${els.keyContentInput.value.toLowerCase()}`);
+  capabilities.push(`category:${categoryID}`);
 
   if (customKey && !customKey.startsWith("NEXUS-")) {
     els.keysStatusText.textContent = "La key personalizada debe empezar con NEXUS-.";
@@ -886,16 +893,36 @@ async function createKeys(event) {
 function refreshKeyContentOptions() {
   if (!els.keyContentInput) return;
   const selected = els.keyContentInput.value;
-  els.keyContentInput.innerHTML = '<option value="">Key general / sin patch específico</option>';
-  for (const file of state.files.filter((item) => isManifestFile(item) && item.content_type !== "text")) {
-    const option = document.createElement("option");
-    option.value = file.id;
-    option.textContent = `${file.name} — $${Number(file.price_usd || 15).toFixed(2)}`;
-    els.keyContentInput.append(option);
+  const categories = allCategoryChoices().filter(cat => categoryContentType(cat) === "patch");
+  els.keyContentInput.replaceChildren(new Option("Selecciona categoría", ""));
+  for (const cat of categories) {
+    els.keyContentInput.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
   }
-  if ([...els.keyContentInput.options].some((option) => option.value === selected)) {
-    els.keyContentInput.value = selected;
+  if (categories.some(cat => cat.id === selected)) els.keyContentInput.value = selected;
+  const pwdSelect = document.querySelector("#passwordCategorySelect");
+  if (pwdSelect) {
+    const old = pwdSelect.value;
+    pwdSelect.replaceChildren(new Option("Selecciona categoría", ""));
+    for (const cat of categories) pwdSelect.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
+    if (categories.some(cat => cat.id === old)) pwdSelect.value = old;
   }
+}
+
+async function saveNexusCategoryPassword() {
+  const categoryID = document.querySelector("#passwordCategorySelect")?.value.trim().toLowerCase();
+  const passwordInput = document.querySelector("#categoryAccessPassword");
+  const status = document.querySelector("#categoryPasswordStatus");
+  const password = passwordInput?.value || "";
+  if (!categoryID || password.length < 12) {
+    if (status) status.textContent = "Selecciona una categoría y escribe al menos 12 caracteres.";
+    return;
+  }
+  if (status) status.textContent = "Guardando de forma segura...";
+  const { data, error } = await supabaseClient.rpc("admin_set_nexus_category_password", {
+    p_category_id: categoryID, p_password: password
+  });
+  if (passwordInput) passwordInput.value = "";
+  if (status) status.textContent = error ? adminErrorMessage(error) : (data?.message || "Contraseña actualizada. No se guardó en el navegador.");
 }
 
 async function copyGeneratedKeys() {
@@ -971,7 +998,7 @@ async function saveFile(event) {
     return;
   }
   if (!targetPath) {
-    setStatus("Completa la ruta que va a reemplazar en NEXUS HACK.");
+    setStatus("Completa la ruta que va a reemplazar en NEXUS.");
     return;
   }
   if (!isCompleteTargetPath(targetPath)) {
@@ -1036,7 +1063,7 @@ async function saveFile(event) {
       p_storage_path: storagePath,
       p_content_type: contentType,
       p_text_content: contentType === "text" ? textBody : null,
-      p_requires_key: els.requiresKeyInput.checked,
+      p_requires_key: true,
       p_price_usd: Math.max(0.01, Number(els.priceUSDInput.value || 15)),
       p_force_new: !isReplacing,
     });
