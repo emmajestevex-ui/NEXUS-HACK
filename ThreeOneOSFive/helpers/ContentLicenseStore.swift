@@ -6,6 +6,7 @@ import Security
 enum ContentLicenseStore {
     private static let guardLock = NSLock()
     private static var unlockedCategories = Set<String>()
+    private static var sessionKeys: [String: String] = [:]
 
     static func hasAccess(category: String) -> Bool {
         guardLock.lock()
@@ -13,9 +14,17 @@ enum ContentLicenseStore {
         return unlockedCategories.contains(category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
     }
 
-    private static func grant(category: String) {
+    static func sessionKey(for category: String) -> String? {
         guardLock.lock()
-        unlockedCategories.insert(category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        defer { guardLock.unlock() }
+        return sessionKeys[category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()]
+    }
+
+    private static func grant(category: String, key: String) {
+        guardLock.lock()
+        let id = category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        unlockedCategories.insert(id)
+        sessionKeys[id] = key // Memory only: never persisted in UserDefaults or app binary.
         guardLock.unlock()
     }
 
@@ -45,7 +54,7 @@ enum ContentLicenseStore {
         }
         let result = try JSONDecoder().decode(ContentLicenseResponse.self, from: data)
         guard result.success else { throw ContentLicenseError.server(result.message) }
-        grant(category: category)
+        grant(category: category, key: normalized)
         return result.message
     }
 }
