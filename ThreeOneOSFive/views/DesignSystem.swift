@@ -43,66 +43,120 @@ enum NexusHaptics {
     }
 }
 
-/// Tormenta azul de baja intensidad. Rayos ramificados con halo y caida continua.
-/// El dibujo nunca intercepta gestos y se desactiva con Reducir movimiento.
+/// Relámpagos con trazos fractales irregulares, bifurcaciones orgánicas,
+/// destellos breves de distinta intensidad y cuatro capas de luz.
+/// Los rayos son eventos temporales, NO líneas que se deslizan por la pantalla.
+/// Se inmovilizan y atenúan al activar «Reducir movimiento» en iOS.
 private struct NexusStormBackground: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private func phase(_ value: Double) -> Double {
-        value - floor(value)
+    private func noise(_ seed: Double) -> Double {
+        let raw = sin(seed * 127.1 + 43.82) * 43758.5453123
+        return raw - floor(raw)
+    }
+
+    private func makePath(_ points: [CGPoint]) -> Path {
+        var path = Path()
+        for (index, point) in points.enumerated() {
+            if index == 0 {
+                path.move(to: point)
+            } else {
+                path.addLine(to: point)
+            }
+        }
+        return path
+    }
+
+    private func paint(_ path: Path, context: GraphicsContext, intensity: Double, isBranch: Bool) {
+        let alpha = max(0.0, min(intensity, 1.0))
+        let outerWidth: CGFloat = isBranch ? 10 : 24
+        let glowWidth: CGFloat = isBranch ? 5 : 10
+        let coreWidth: CGFloat = isBranch ? 0.65 : 1.15
+        let join: CGLineJoin = .round
+
+        context.stroke(path,
+            with: .color(NexusTheme.blue.opacity(alpha * 0.11)),
+            style: StrokeStyle(lineWidth: outerWidth, lineCap: .round, lineJoin: join))
+        context.stroke(path,
+            with: .color(NexusTheme.blueBright.opacity(alpha * 0.28)),
+            style: StrokeStyle(lineWidth: glowWidth, lineCap: .round, lineJoin: join))
+        context.stroke(path,
+            with: .color(Color(red: 0.47, green: 0.77, blue: 1.0).opacity(alpha * 0.64)),
+            style: StrokeStyle(lineWidth: isBranch ? 1.5 : 2.7, lineCap: .round, lineJoin: join))
+        context.stroke(path,
+            with: .color(Color(red: 0.90, green: 0.97, blue: 1.0).opacity(alpha * 0.92)),
+            style: StrokeStyle(lineWidth: coreWidth, lineCap: .round, lineJoin: join))
+    }
+
+    private func strike(context: GraphicsContext, width: Double, height: Double, time: Double, index: Int) {
+        let i = Double(index)
+        let interval = 3.7 + i * 0.87
+        let cycle = (time + i * 2.71) / interval
+        let event = floor(cycle)
+        let age = (cycle - event) * interval
+
+        // A lightning flash lasts only a fraction of a second; sometimes
+        // it fires a weaker echo. Most frames show a dark, clean background.
+        let strength: Double
+        if reduceMotion {
+            strength = index == 1 ? 0.045 : 0
+        } else if age < 0.36 {
+            let firstFlash = exp(-age * 28.0)
+            let secondFlash = age > 0.10 ? 0.48 * exp(-(age - 0.10) * 27.0) : 0
+            strength = min(0.90, (0.54 + noise(i * 9.17) * 0.29) * (firstFlash + secondFlash))
+        } else {
+            return
+        }
+
+        if strength <= 0.012 { return }
+
+        let originX = width * (0.12 + noise(i * 9.1) * 0.76)
+        let originY = height * (0.06 + noise(i * 7.3) * 0.25)
+        let length = height * (0.49 + noise(i * 2.9) * 0.36)
+        let drift = width * (noise(i * 13.1 + event * 0.71) - 0.5) * 0.45
+
+        var mainPoints: [CGPoint] = []
+        var wander = 0.0
+        for step in 0...30 {
+            let fraction = Double(step) / 30.0
+            let jitter = (noise(Double(step) * 2.49 + i * 91.7 + event * 4.33) - 0.5) * 44
+            wander = max(-62, min(62, wander * 0.68 + jitter))
+            let currentX = originX + drift * fraction + wander
+            let currentY = originY + length * fraction
+            mainPoints.append(CGPoint(x: currentX, y: currentY))
+        }
+
+        paint(makePath(mainPoints), context: context, intensity: strength, isBranch: false)
+
+        // Forks start ON the main channel and diverge at unequal angles,
+        // rather than appearing as independent vertical sticks.
+        for (branchIndex, originStep) in [8, 15, 23].enumerated() {
+            let j = Double(branchIndex)
+            let start = mainPoints[originStep]
+            var branchPoints: [CGPoint] = [start]
+            var x = Double(start.x)
+            var y = Double(start.y)
+            let direction = noise(i * 17.9 + j * 13.0 + event * 0.17) > 0.5 ? 1.0 : -1.0
+            for step in 1...8 {
+                let variation = noise(Double(step) * 3.19 + i * 13.7 + j * 47.1 + event)
+                x += direction * (4.0 + variation * 8.5)
+                y += 8.0 + noise(Double(step) * 7.9 + j * 2.3 + event) * 9.0
+                branchPoints.append(CGPoint(x: x, y: y))
+            }
+            paint(makePath(branchPoints), context: context,
+                  intensity: strength * (0.46 + noise(j + i) * 0.16), isBranch: true)
+        }
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: reduceMotion ? 1.0 : 1.0 / 24.0)) { timeline in
-            Canvas(opaque: false) { context, size in
-                let t = reduceMotion ? 0.0 : timeline.date.timeIntervalSinceReferenceDate
-                let h = max(Double(size.height), 1)
-                let w = max(Double(size.width), 1)
-                for index in 0..<8 {
-                    let i = Double(index)
-                    let progress = phase(t / (6.6 + i * 0.23) + i * 0.157)
-                    let head = -120.0 + progress * (h + 440)
-                    let startX = w * (0.09 + phase(i * 0.271) * 0.82)
-                    let slope = sin(i * 2.87) * 0.13
-                    let segmentLength = 25.0
-                    var points: [CGPoint] = []
-                    for step in 0...10 {
-                        let j = Double(step)
-                        let jagged = sin(i * 14.3 + j * 29.7) * 12
-                            + sin(i * 4.97 + j * 9.13) * 6
-                        let x = startX + (j - 5.0) * slope * 15 + jagged
-                        points.append(CGPoint(x: x, y: head - 290 + j * segmentLength))
-                    }
-                    var mainPath = Path()
-                    for (n, point) in points.enumerated() {
-                        if n == 0 { mainPath.move(to: point) } else { mainPath.addLine(to: point) }
-                    }
-
-                    // Desvanecimiento suave de cada rayo; el brillo no ocupa el primer plano.
-                    let pulse = 0.68 + 0.32 * abs(sin(t * 0.7 + i * 3.1))
-                    let alpha = (index.isMultiple(of: 3) ? 0.11 : 0.07) * pulse
-                    context.stroke(mainPath,
-                        with: .color(NexusTheme.blue.opacity(alpha * 0.24)),
-                        style: StrokeStyle(lineWidth: 14, lineCap: .round, lineJoin: .round))
-                    context.stroke(mainPath,
-                        with: .color(NexusTheme.blueBright.opacity(alpha * 0.68)),
-                        style: StrokeStyle(lineWidth: 4.2, lineCap: .round, lineJoin: .round))
-                    context.stroke(mainPath,
-                        with: .color(Color(red: 0.75, green: 0.91, blue: 1.0).opacity(alpha)),
-                        style: StrokeStyle(lineWidth: 0.85, lineCap: .round, lineJoin: .round))
-
-                    // Ramificaciones cortas que dan profundidad sin convertirlo en un relámpago intenso.
-                    for branchIndex in [3, 7] {
-                        let origin = points[branchIndex]
-                        let direction = sin(i * 7.0 + Double(branchIndex)) > 0 ? 1.0 : -1.0
-                        var branch = Path()
-                        branch.move(to: origin)
-                        branch.addLine(to: CGPoint(x: origin.x + direction * 14, y: origin.y + 18))
-                        branch.addLine(to: CGPoint(x: origin.x + direction * 28, y: origin.y + 36))
-                        context.stroke(branch,
-                            with: .color(NexusTheme.blueBright.opacity(alpha * 0.5)),
-                            style: StrokeStyle(lineWidth: 1.0, lineCap: .round, lineJoin: .round))
-                    }
+        TimelineView(.animation(minimumInterval: reduceMotion ? 1.0 : 1.0 / 30.0)) { timeline in
+            Canvas(opaque: false, rendersAsynchronously: true) { context, size in
+                let timestamp = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
+                let width = max(1, Double(size.width))
+                let height = max(1, Double(size.height))
+                for index in 0..<5 {
+                    strike(context: context, width: width, height: height,
+                           time: timestamp, index: index)
                 }
             }
         }
