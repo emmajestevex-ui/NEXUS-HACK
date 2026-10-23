@@ -1218,8 +1218,9 @@ enum RemoteContentLibrary {
         for file: RemoteContentFile,
         fileManager: FileManager = .default
     ) -> URL? {
-        guard !file.requiresKey || ContentLicenseStore.hasAccess(category: file.category),
-              let manifest = loadManifest(fileManager: fileManager),
+        guard let manifest = loadManifest(fileManager: fileManager),
+              (!manifest.appContent.categoryRequiresKey(file.category, fallback: file.requiresKey)
+                || ContentLicenseStore.hasAccess(category: file.category)),
               let trustedFile = manifest.files.first(where: {
                   $0.id == file.id && $0.cacheRelativePath == file.cacheRelativePath && $0.isAvailable
               }) else {
