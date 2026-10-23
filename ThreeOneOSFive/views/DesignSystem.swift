@@ -43,33 +43,66 @@ enum NexusHaptics {
     }
 }
 
-/// Rayos discretos al fondo; no interceptan toques y respetan Reduce Motion.
+/// Tormenta azul de baja intensidad. Rayos ramificados con halo y caida continua.
+/// El dibujo nunca intercepta gestos y se desactiva con Reducir movimiento.
 private struct NexusStormBackground: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private func phase(_ value: Double) -> Double {
+        value - floor(value)
+    }
+
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 15.0)) { timeline in
-            Canvas { context, size in
+        TimelineView(.animation(minimumInterval: reduceMotion ? 1.0 : 1.0 / 24.0)) { timeline in
+            Canvas(opaque: false) { context, size in
                 let t = reduceMotion ? 0.0 : timeline.date.timeIntervalSinceReferenceDate
-                for index in 0..<7 {
-                    let seed = Double(index)
-                    let fall = (t * (14.0 + seed * 2.3) + seed * 151.0)
-                        .truncatingRemainder(dividingBy: Double(max(size.height, 1)) + 190)
-                    let top = fall - 160.0
-                    let startX = Double(size.width) * (0.1 + seed * 0.13)
-                    var bolt = Path()
-                    for step in 0...7 {
-                        let y = top + Double(step) * 30
-                        let x = startX + sin(seed * 3.1 + Double(step) * 1.9 + t * 0.22) * 13
-                        let point = CGPoint(x: x, y: y)
-                        if step == 0 { bolt.move(to: point) }
-                        else { bolt.addLine(to: point) }
+                let h = max(Double(size.height), 1)
+                let w = max(Double(size.width), 1)
+                for index in 0..<8 {
+                    let i = Double(index)
+                    let progress = phase(t / (6.6 + i * 0.23) + i * 0.157)
+                    let head = -120.0 + progress * (h + 440)
+                    let startX = w * (0.09 + phase(i * 0.271) * 0.82)
+                    let slope = sin(i * 2.87) * 0.13
+                    let segmentLength = 25.0
+                    var points: [CGPoint] = []
+                    for step in 0...10 {
+                        let j = Double(step)
+                        let jagged = sin(i * 14.3 + j * 29.7) * 12
+                            + sin(i * 4.97 + j * 9.13) * 6
+                        let x = startX + (j - 5.0) * slope * 15 + jagged
+                        points.append(CGPoint(x: x, y: head - 290 + j * segmentLength))
                     }
-                    context.stroke(
-                        bolt,
-                        with: .color(NexusTheme.blueBright.opacity(index.isMultiple(of: 2) ? 0.10 : 0.06)),
-                        style: StrokeStyle(lineWidth: 1.1, lineCap: .round, lineJoin: .round)
-                    )
+                    var mainPath = Path()
+                    for (n, point) in points.enumerated() {
+                        if n == 0 { mainPath.move(to: point) } else { mainPath.addLine(to: point) }
+                    }
+
+                    // Desvanecimiento suave de cada rayo; el brillo no ocupa el primer plano.
+                    let pulse = 0.68 + 0.32 * abs(sin(t * 0.7 + i * 3.1))
+                    let alpha = (index.isMultiple(of: 3) ? 0.11 : 0.07) * pulse
+                    context.stroke(mainPath,
+                        with: .color(NexusTheme.blue.opacity(alpha * 0.24)),
+                        style: StrokeStyle(lineWidth: 14, lineCap: .round, lineJoin: .round))
+                    context.stroke(mainPath,
+                        with: .color(NexusTheme.blueBright.opacity(alpha * 0.68)),
+                        style: StrokeStyle(lineWidth: 4.2, lineCap: .round, lineJoin: .round))
+                    context.stroke(mainPath,
+                        with: .color(Color(red: 0.75, green: 0.91, blue: 1.0).opacity(alpha)),
+                        style: StrokeStyle(lineWidth: 0.85, lineCap: .round, lineJoin: .round))
+
+                    // Ramificaciones cortas que dan profundidad sin convertirlo en un relámpago intenso.
+                    for branchIndex in [3, 7] {
+                        let origin = points[branchIndex]
+                        let direction = sin(i * 7.0 + Double(branchIndex)) > 0 ? 1.0 : -1.0
+                        var branch = Path()
+                        branch.move(to: origin)
+                        branch.addLine(to: CGPoint(x: origin.x + direction * 14, y: origin.y + 18))
+                        branch.addLine(to: CGPoint(x: origin.x + direction * 28, y: origin.y + 36))
+                        context.stroke(branch,
+                            with: .color(NexusTheme.blueBright.opacity(alpha * 0.5)),
+                            style: StrokeStyle(lineWidth: 1.0, lineCap: .round, lineJoin: .round))
+                    }
                 }
             }
         }
