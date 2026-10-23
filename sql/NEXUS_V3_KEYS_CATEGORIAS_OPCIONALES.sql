@@ -1,10 +1,12 @@
 -- NEXUS V3 · Licencias normales y por categoría independientes
 -- REQUISITOS: ejecutar previamente los SQL base licenses_setup.sql,
--- remote_content_setup.sql y el SQL de categorías anterior.
+-- remote_content_setup.sql (que crea nexus_app_settings).
 -- Ejecutar solamente en el Supabase de NEXUS-HACK; revisar antes de RUN.
 -- NO modifica archivos .3105 ni cifra los patches.
 -- Una categoría marcada libre no requiere key, tras publicar los cambios.
 -- La IPA que llama a activate_nexus_category_key necesita este SQL.
+-- No ejecuta borrados ni modifica las filas de licencias existentes por sí sola.
+-- REVISAR y ejecutar manualmente en el Supabase exclusivo de NEXUS.
 begin;
 
 create or replace function public.admin_generate_licenses(
@@ -37,6 +39,10 @@ begin
         raise exception 'Capabilities must be a JSON array';
     end if;
 
+    if jsonb_array_length(v_capabilities) > 1 then
+        raise exception 'Una key solo puede contener una capacidad';
+    end if;
+
     -- Las keys normales no llevan capacidades; una key de categoría requiere
     -- que el administrador haya marcado exactamente esa categoría «Con key».
     if exists (
@@ -44,64 +50,7 @@ begin
         from jsonb_array_elements_text(v_capabilities) as capability(value)
         where capability.value <> 'special_assetindexer'
           and not (
-            capability.value ~ '^category:[a-z0-9][a-z0-9_-]{0,79}
-
-    if v_duration is not null and v_duration > 0 then
-        v_expires_at := now() + make_interval(hours => v_duration);
-    end if;
-
-    if v_custom <> '' then
-        if v_quantity <> 1 then
-            raise exception 'Custom keys can only be created one at a time';
-        end if;
-
-        if v_custom ~ '^NEXUS-[0-9]+$' then
-            raise exception 'Old numeric key format is disabled';
-        end if;
-
-        v_key := null;
-        insert into public.licenses (license_key, label, capabilities, expires_at, created_by, status, is_active)
-        values (v_custom, nullif(trim(coalesce(p_label, '')), ''), v_capabilities, v_expires_at, auth.uid(), 'available', true)
-        on conflict (license_key) do update
-        set
-            label = excluded.label,
-            capabilities = excluded.capabilities,
-            expires_at = excluded.expires_at,
-            updated_at = now()
-        where public.licenses.used_at is null
-          and public.licenses.device_id is null
-          and public.licenses.activated_at is null
-        returning license_key into v_key;
-
-        if v_key is null then
-            raise exception 'Custom key already exists and has been used';
-        end if;
-
-        v_keys := array_append(v_keys, v_custom);
-    else
-        for i in 1..v_quantity loop
-            loop
-                v_key := public.generate_secure_license_key('NEXUS');
-                begin
-                    insert into public.licenses (license_key, label, capabilities, expires_at, created_by, status, is_active)
-                    values (v_key, nullif(trim(coalesce(p_label, '')), ''), v_capabilities, v_expires_at, auth.uid(), 'available', true);
-                    v_keys := array_append(v_keys, v_key);
-                    exit;
-                exception when unique_violation then
-                end;
-            end loop;
-        end loop;
-    end if;
-
-    return json_build_object(
-        'success', true,
-        'message', 'Keys generated',
-        'keys', v_keys,
-        'expires_at', v_expires_at
-    );
-end;
-$$;
-
+            capability.value ~ '^category:[a-z0-9][a-z0-9_-]{0,79}$'
             and exists (
                 select 1
                 from public.nexus_app_settings settings
@@ -426,6 +375,9 @@ begin
   where settings.id='main' and lower(cat->>'id')=v_category
     and cat->>'content_type'='patch'
   limit 1;
+  if v_requires_key is null then
+    return json_build_object('success',false,'message','La categoría no está configurada en NEXUS');
+  end if;
   if v_requires_key is false then
     return json_build_object('success',false,'message','La categoría está configurada como libre; no necesita key');
   end if;
