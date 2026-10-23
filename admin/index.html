@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="Cache-Control" content="no-store" />
     <title>NEXUS Admin</title>
-    <link rel="stylesheet" href="./styles.css?v=20261005-ios27-install" />
+    <link rel="stylesheet" href="./styles.css?v=20261023-secciones-separadas" />
   </head>
   <body>
     <main class="shell">
@@ -47,8 +47,13 @@
         </form>
       </section>
 
+      <nav id="adminNavigation" class="adminNavigation hidden" aria-label="Secciones de administración">
+        <button type="button" class="adminNavItem isActive" data-admin-target="patches" aria-pressed="true"><span class="adminNavNumber">01</span><span><strong>Patches y archivos</strong><small>Subir, reemplazar y publicar</small></span></button>
+        <button type="button" class="adminNavItem" data-admin-target="categories" aria-pressed="false"><span class="adminNavNumber">02</span><span><strong>Categorías</strong><small>Organizar y asignar acceso</small></span></button>
+        <button type="button" class="adminNavItem" data-admin-target="keys" aria-pressed="false"><span class="adminNavNumber">03</span><span><strong>Keys por categoría</strong><small>Generar, buscar y gestionar</small></span></button>
+      </nav>
       <section id="adminPanel" class="grid hidden">
-        <aside class="panel">
+        <aside class="panel" data-admin-view="patches">
           <div class="panelHeader">
             <div>
               <h2 id="formTitle">Nuevo patch</h2>
@@ -103,11 +108,10 @@
               Descripcion
               <textarea id="descriptionInput" rows="3" placeholder="Nota interna opcional"></textarea>
             </label>
-            <label class="checkLabel">
-              <input id="requiresKeyInput" type="checkbox" checked />
-              Requerir key y contraseña de su categoría
-              <span class="fieldHint">Una key desbloquea todos los archivos de esta categoría. Las categorías requieren contraseña configurada desde este panel.</span>
-            </label>
+            <div class="patchAccessNote">
+              <input id="requiresKeyInput" type="checkbox" checked hidden />
+              <span>Este patch utiliza la categoría seleccionada. Las keys y el acceso se gestionan en las pestañas <b>Categorías</b> y <b>Keys por categoría</b>.</span>
+            </div>
             <label>
               Precio de referencia (USD)
               <input id="priceUSDInput" type="number" min="0.01" step="0.01" value="15.00" />
@@ -139,7 +143,7 @@
           </form>
         </aside>
 
-        <section class="panel">
+        <section class="panel" data-admin-view="patches">
           <div class="panelHeader">
             <div>
               <h2>Publicacion</h2>
@@ -168,11 +172,11 @@
           </div>
         </section>
 
-        <section class="panel fullWidth">
+        <section class="panel fullWidth" data-admin-view="categories">
           <div class="panelHeader">
             <div>
-              <h2>Diseno remoto</h2>
-              <p class="muted">Edita categorias, subcategorias, anuncios y redes sin cambiar la IPA.</p>
+              <h2>Categorías y acceso</h2>
+              <p class="muted">Aquí se organizan las categorías. Los patches se administran en otra pestaña y las keys se generan por categoría completa.</p>
             </div>
             <div class="actions">
               <button id="loadSettingsButton" class="ghost" type="button">Cargar diseno</button>
@@ -183,7 +187,7 @@
           <div class="visualEditor">
             <div class="visualEditorHeader">
               <div>
-                <h3>Categorías visuales</h3>
+                <h3>1. Crear y organizar categorías</h3>
                 <p class="muted">Crea las pestañas inferiores sin escribir JSON.</p>
               </div>
               <button id="newCategoryButton" class="ghost" type="button">Nueva categoría</button>
@@ -202,12 +206,20 @@
             </form>
             <div id="categoryList" class="categoryList"></div>
 <div class="categoryPasswordBox">
-                <h3>Contraseña de acceso por categoría</h3>
-                <p class="muted">Obligatoria para cada categoría con patches; se guarda como hash en Supabase, nunca en la página ni en el manifiesto.</p>
-                <label>Categoría<select id="passwordCategorySelect"></select></label>
-                <label>Nueva contraseña (mínimo 12 caracteres)<input id="categoryAccessPassword" type="password" minlength="12" maxlength="128" autocomplete="new-password" /></label>
-                <button id="saveCategoryPassword" type="button" class="primary">Guardar contraseña de categoría</button>
-                <p id="categoryPasswordStatus" class="notice" role="status"></p>
+                <h3>2. Acceso por categoría</h3>
+                <p class="muted">Selecciona una categoría para gestionar sus licencias. Las keys se asignan a la categoría completa, no a cada patch.</p>
+                <label>Categoría<select id="quickKeyCategorySelect"></select></label>
+                <button id="goCreateCategoryKeys" type="button" class="primary">Gestionar keys de esta categoría →</button>
+                <p id="quickKeyCategoryStatus" class="notice" role="status">Al generar keys, Supabase guarda el permiso de la categoría seleccionada.</p>
+                <p class="fieldHint">Nota: este panel no cambia los requisitos de la IPA; algunas versiones también solicitan contraseña.</p>
+                <details class="legacyPasswordSettings">
+                  <summary>Compatibilidad: IPA que todavía solicita contraseña</summary>
+                  <p class="muted">La versión actual de la IPA puede seguir solicitando contraseña además de la key. Esta opción solo se conserva por compatibilidad; no se ha modificado la IPA.</p>
+                  <label>Categoría<select id="passwordCategorySelect"></select></label>
+                  <label>Contraseña de compatibilidad<input id="categoryAccessPassword" type="password" minlength="12" maxlength="128" autocomplete="new-password" /></label>
+                  <button id="saveCategoryPassword" type="button" class="ghost">Guardar contraseña de compatibilidad</button>
+                  <p id="categoryPasswordStatus" class="notice" role="status"></p>
+                </details>
               </div>
             <div class="visualEditorHeader tabEditorHeader">
               <div><h3>Pestañas inferiores</h3><p class="muted">Estas son Inicio, Archivos, Instalación, Redes y las nuevas categorías.</p></div>
@@ -217,11 +229,12 @@
           <textarea id="settingsInput" class="settingsEditor" rows="18" spellcheck="false"></textarea>
         </section>
 
-        <section class="panel fullWidth">
+        <section class="panel fullWidth" data-admin-view="keys">
           <div class="panelHeader">
             <div>
-              <h2>Keys</h2>
+              <h2>Generador de keys por categoría</h2>
               <p id="keysStatusText" class="muted">Cargando licencias...</p>
+              <p class="muted">Selecciona la categoría a desbloquear; una key puede servir para todos sus patches. No hay generador individual por patch.</p>
             </div>
             <div class="actions">
               <button id="refreshKeysButton" class="ghost" type="button">Actualizar keys</button>
@@ -254,11 +267,11 @@
               <input id="keyLabelInput" type="text" maxlength="80" placeholder="Cliente o nota interna" />
             </label>
             <label>
-              Patch autorizado
+              Categoría autorizada
               <select id="keyContentInput">
                 <option value="">Selecciona una categoría</option>
               </select>
-              <span class="fieldHint">La key desbloqueará todos los patches de la categoría elegida. Precio de referencia: $15.00 USD.</span>
+              <span class="fieldHint">Genera una key para toda la categoría seleccionada, no para cada patch. Precio de referencia: $15.00 USD.</span>
             </label>
             <label>
               Key personalizada
@@ -278,6 +291,7 @@
           </form>
 
           <div class="toolbar">
+            <select id="keyCategoryFilter" aria-label="Filtrar keys por categoría" class="keyCategoryFilter"><option value="">Todas las categorías</option></select>
             <input id="keySearchInput" type="search" placeholder="Buscar key, dispositivo o IP..." />
             <span id="keyCounter" class="counter">0 keys</span>
           </div>
@@ -329,6 +343,6 @@
       </article>
     </template>
 
-    <script type="module" src="./app.js?v=20261019-3105-import"></script>
+    <script type="module" src="./app.js?v=20261023-secciones-separadas"></script>
   </body>
 </html>

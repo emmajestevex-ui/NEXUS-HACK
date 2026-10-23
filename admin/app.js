@@ -148,6 +148,7 @@ const state = {
   editorMode: "category",
   session: null,
   busy: false,
+  activeAdminView: "patches",
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -246,6 +247,7 @@ async function init() {
   });
 
   bindEvents();
+  setAdminView(window.location.hash.slice(1), false);
   try {
     const { data } = await withTimeout(
       supabaseClient.auth.getSession(),
@@ -275,8 +277,11 @@ function bindEvents() {
   els.searchInput.addEventListener("input", renderFiles);
   els.refreshKeysButton.addEventListener("click", loadKeys);
   els.keySearchInput.addEventListener("input", renderKeys);
+  document.querySelector("#keyCategoryFilter")?.addEventListener("change", renderKeys);
+  document.querySelectorAll("[data-admin-target]").forEach(button => button.addEventListener("click", () => setAdminView(button.dataset.adminTarget)));
   els.keyForm.addEventListener("submit", createKeys);
   document.querySelector("#saveCategoryPassword")?.addEventListener("click", saveNexusCategoryPassword);
+  document.querySelector("#goCreateCategoryKeys")?.addEventListener("click", openCategoryKeyGenerator);
   els.copyGeneratedKeysButton.addEventListener("click", copyGeneratedKeys);
   els.loadSettingsButton.addEventListener("click", loadSettings);
   els.saveSettingsButton.addEventListener("click", saveSettings);
@@ -434,6 +439,8 @@ function setSession(session) {
   const signedIn = Boolean(session);
   els.loginPanel.classList.toggle("hidden", signedIn);
   els.adminPanel.classList.toggle("hidden", !signedIn);
+  document.querySelector("#adminNavigation")?.classList.toggle("hidden", !signedIn);
+  if (signedIn) setAdminView(state.activeAdminView, false);
   els.signOutButton.classList.toggle("hidden", !signedIn);
   els.sessionEmail.textContent = session?.user?.email ?? "Sin sesion";
 
@@ -448,6 +455,19 @@ function setSession(session) {
     renderFiles();
     renderKeys();
   }
+}
+
+function setAdminView(target = "patches", updateHash = true) {
+  const view = ["patches", "categories", "keys"].includes(target) ? target : "patches";
+  state.activeAdminView = view;
+  document.querySelectorAll("[data-admin-view]").forEach(panel => panel.classList.toggle("hidden", panel.dataset.adminView !== view));
+  document.querySelectorAll("[data-admin-target]").forEach(button => {
+    const active = button.dataset.adminTarget === view;
+    button.classList.toggle("isActive", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  if (updateHash) window.history.replaceState(null, "", "#" + view);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 async function loadFiles() {
@@ -465,6 +485,7 @@ async function loadFiles() {
 
   state.files = (data ?? []).filter(isGreegFile);
   refreshKeyContentOptions();
+  renderCategoryEditor();
   setStatus("Listo. Recuerda publicar para que los iPhone reciban los cambios.");
   renderFiles();
 }
@@ -482,6 +503,7 @@ async function loadKeys() {
   }
 
   state.licenses = data ?? [];
+  renderCategoryEditor();
   els.keysStatusText.textContent = "Keys cargadas. La activacion se valida en Supabase.";
   renderKeys();
 }
@@ -652,9 +674,20 @@ function renderCategoryEditor() {
     <article class="categoryEditorCard">
       <div class="categoryEditorIcon"><span class="sfIcon">${escapeHtml(category.icon || "square.grid.2x2.fill")}</span></div>
       <div class="categoryEditorMain"><strong>${escapeHtml(categoryPath(category.id, categories))}</strong><span>${escapeHtml(category.subtitle || "Sin descripción")}</span><small>${escapeHtml(category.color || "blue")} · ${categoryContentType(category) === "container" ? "Contenedor" : categoryContentType(category) === "text" ? "Texto" : "Patch"} · orden ${Number(category.sort_order || 0)}</small></div>
-      <div class="categoryEditorActions"><button class="ghost categoryEditButton" data-category-id="${escapeHtml(category.id)}" type="button">Editar</button><button class="ghost categoryDeleteButton" data-category-id="${escapeHtml(category.id)}" type="button">Eliminar</button></div>
+      <div class="categoryEditorActions"><button class="ghost categoryEditButton" data-category-id="${escapeHtml(category.id)}" type="button">Editar</button><button class="ghost categoryKeysButton" data-category-id="${escapeHtml(category.id)}" type="button">Gestionar keys</button><button class="ghost categoryDeleteButton" data-category-id="${escapeHtml(category.id)}" type="button">Eliminar</button></div>
     </article>`).join("") : '<p class="muted">Todavía no hay categorías. Pulsa Nueva categoría.</p>';
   els.categoryList.querySelectorAll(".categoryEditButton").forEach((button) => button.addEventListener("click", () => openCategoryEditor(button.dataset.categoryId)));
+  els.categoryList.querySelectorAll(".categoryKeysButton").forEach(button => button.addEventListener("click", () => {
+    const category = categoryById(button.dataset.categoryId) || allCategoryChoices().find(c => c.id === button.dataset.categoryId);
+    if (categoryContentType(category) !== "patch") {
+      document.querySelector("#quickKeyCategoryStatus").textContent = "Solo las categorías de patches pueden recibir keys de acceso.";
+      return;
+    }
+    els.keyContentInput.value = button.dataset.categoryId;
+    document.querySelector("#keyCategoryFilter").value = button.dataset.categoryId;
+    setAdminView("keys");
+    renderKeys();
+  }));
   els.categoryList.querySelectorAll(".categoryDeleteButton").forEach((button) => button.addEventListener("click", () => deleteCategory(button.dataset.categoryId)));
   renderTabEditor();
 }
@@ -899,6 +932,22 @@ function refreshKeyContentOptions() {
     els.keyContentInput.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
   }
   if (categories.some(cat => cat.id === selected)) els.keyContentInput.value = selected;
+  const quickSelect = document.querySelector("#quickKeyCategorySelect");
+  if (quickSelect) {
+    const previous = quickSelect.value;
+    quickSelect.replaceChildren(new Option("Selecciona categoría", ""));
+    for (const cat of categories) {
+      quickSelect.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
+    }
+    if (categories.some(cat => cat.id === previous)) quickSelect.value = previous;
+  }
+  const filter = document.querySelector("#keyCategoryFilter");
+  if (filter) {
+    const selectedCategoryFilter = filter.value;
+    filter.replaceChildren(new Option("Todas las categorías", ""), new Option("Keys antiguas / sin categoría", "__legacy__"));
+    for (const cat of categories) filter.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
+    if (categories.some(cat => cat.id === selectedCategoryFilter) || selectedCategoryFilter === "__legacy__") filter.value = selectedCategoryFilter;
+  }
   const pwdSelect = document.querySelector("#passwordCategorySelect");
   if (pwdSelect) {
     const old = pwdSelect.value;
@@ -906,6 +955,26 @@ function refreshKeyContentOptions() {
     for (const cat of categories) pwdSelect.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
     if (categories.some(cat => cat.id === old)) pwdSelect.value = old;
   }
+}
+
+function openCategoryKeyGenerator() {
+  const categoryID = document.querySelector("#quickKeyCategorySelect")?.value.trim().toLowerCase() || "";
+  const status = document.querySelector("#quickKeyCategoryStatus");
+  if (!categoryID) {
+    if (status) status.textContent = "Primero selecciona una categoría.";
+    return;
+  }
+  els.keyContentInput.value = categoryID;
+  if (els.keyContentInput.value !== categoryID) {
+    if (status) status.textContent = "La categoría no está disponible para generar keys.";
+    return;
+  }
+  if (status) status.textContent = "Categoría seleccionada. Completa cantidad y duración y pulsa Crear keys.";
+  document.querySelector("#keyCategoryFilter").value = categoryID;
+  setAdminView("keys");
+  renderKeys();
+  els.keyForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  els.keyQuantityInput.focus({ preventScroll: true });
 }
 
 async function saveNexusCategoryPassword() {
@@ -1429,10 +1498,15 @@ function renderFiles() {
 function renderKeys() {
   if (!els.keyList) return;
   const query = els.keySearchInput.value.trim().toLowerCase();
+  const categoryFilter = document.querySelector("#keyCategoryFilter")?.value || "";
   const licenses = state.licenses.filter((license) => {
+    const capabilities = Array.isArray(license.capabilities) ? license.capabilities : [];
+    const categoryIDs = capabilities.filter(capability => typeof capability === "string" && capability.startsWith("category:")).map(capability => capability.slice(9));
+    if (categoryFilter && (categoryFilter === "__legacy__" ? categoryIDs.length > 0 : !categoryIDs.includes(categoryFilter))) return false;
     if (!query) return true;
     return [
       license.license_key,
+      ...(Array.isArray(license.capabilities) ? license.capabilities : []),
       license.status,
       license.label,
       license.device_id,
@@ -1460,7 +1534,9 @@ function renderKeys() {
   for (const license of licenses) {
     const node = els.keyTemplate.content.firstElementChild.cloneNode(true);
     node.querySelector("h3").textContent = license.license_key;
+    const categoryIDs = (Array.isArray(license.capabilities) ? license.capabilities : []).filter(v => typeof v === "string" && v.startsWith("category:")).map(v => v.slice(9));
     node.querySelector(".fileMeta").textContent = [
+      categoryIDs.length ? `Categoría: ${categoryIDs.map(id => categoryPath(id, allCategoryChoices())).join(", ")}` : "Tipo: key antigua / general",
       `Estado: ${licenseStatusLabel(license)}`,
       license.label ? `Nota: ${license.label}` : null,
       license.expires_at ? `Expira: ${formatDate(license.expires_at)}` : "Sin expiracion",
@@ -1501,7 +1577,7 @@ function renderFileCard(file) {
     file.target_bundle || DEFAULT_TARGET_BUNDLE,
     file.file_name,
     formatBytes(file.byte_size),
-    file.requires_key === false ? "Sin key individual" : `$${Number(file.price_usd || 15).toFixed(2)} · key individual`,
+    file.requires_key === false ? "Acceso no restringido por archivo" : `${Number(file.price_usd || 15).toFixed(2)} · acceso por categoría`,
   ].join(" / ");
   node.querySelector(".filePath").textContent = `Ruta: ${file.target_path || fallbackTargetPath(file)}`;
   node.querySelector(".fileHash").textContent = file.sha256;
