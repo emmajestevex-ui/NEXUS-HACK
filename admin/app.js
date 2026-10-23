@@ -1213,18 +1213,36 @@ async function saveFile(event) {
   try {
     const hash = await sha256Hex(file);
     let uploadedPath = "";
-    const storagePath = `content/${crypto.randomUUID()}/${safeStorageFileName(file.name)}`;
+    const secureUpload = contentType === "patch" && document.querySelector("#securePatchUpload")?.checked === true;
+    const safeName = safeStorageFileName(file.name).slice(0, 110);
+    const storagePath = secureUpload
+      ? `content/${crypto.randomUUID()}/${safeName}.nex`
+      : `content/${crypto.randomUUID()}/${safeName}`;
 
-    setStatus("Subiendo archivo...");
-    const { error: uploadError } = await supabaseClient.storage
-      .from(BUCKET)
-      .upload(storagePath, file, {
-        cacheControl: "3600",
-        contentType: file.type || "application/octet-stream",
-        upsert: true,
+    setStatus(secureUpload ? "Cifrando el patch en Supabase..." : "Subiendo archivo...");
+    if (secureUpload) {
+      if (file.size > 12 * 1024 * 1024) throw new Error("El servidor seguro permite patches de hasta 12 MiB.");
+      const response = await fetch(SUPABASE_URL + "/functions/v1/nexus-secure-patch?mode=upload", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + state.session.access_token,
+          "apikey": SUPABASE_KEY,
+          "Content-Type": "application/octet-stream",
+          "X-Nexus-Path": storagePath,
+        },
+        body: file,
       });
-
-    if (uploadError) throw uploadError;
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success || result.storage_path !== storagePath) {
+        throw new Error(result.error || "No se pudo subir cifrado: comprueba la Edge Function y su secreto.");
+      }
+    } else {
+      const { error: uploadError } = await supabaseClient.storage.from(BUCKET)
+        .upload(storagePath, file, {
+          cacheControl: "3600", contentType: file.type || "application/octet-stream", upsert: false
+        });
+      if (uploadError) throw uploadError;
+    }
     uploadedPath = storagePath;
 
     let thumbnailPath = els.descriptionInput.dataset.thumbnailPath || thumbnailMarkerFromDescription(els.descriptionInput.value);
@@ -1429,6 +1447,7 @@ function editFile(file) {
   els.requiresKeyInput.checked = file.requires_key !== false;
   els.priceUSDInput.value = Number(file.price_usd || 15).toFixed(2);
   els.descriptionInput.dataset.thumbnailPath = thumbnailMarkerFromDescription(file.description);
+  document.querySelector("#securePatchUpload").checked = true;
   els.importedPackageInput.checked = String(file.file_name || "").toLowerCase().endsWith(".3105")
     || String(file.mime_type || "").toLowerCase() === "application/vnd.greeg.3105";
   els.fileInput.value = "";
@@ -1447,6 +1466,7 @@ function resetForm() {
   delete els.targetPathInput.dataset.touched;
   els.categoryInput.value = "files";
   els.importedPackageInput.checked = false;
+  document.querySelector("#securePatchUpload").checked = true;
   els.requiresKeyInput.checked = true;
   els.priceUSDInput.value = "15.00";
   els.textContentInput.value = "";
