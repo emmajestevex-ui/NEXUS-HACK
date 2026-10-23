@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="Cache-Control" content="no-store" />
     <title>NEXUS Admin</title>
-    <link rel="stylesheet" href="./styles.css?v=20261023-cuatro-apartados" />
+    <link rel="stylesheet" href="./styles.css?v=20261023-categoria-ipav3" />
   </head>
   <body>
     <main class="shell">
@@ -211,7 +211,7 @@
               <div class="visualEditorHeader"><div><h3>2. Elegir categorías con key</h3><p class="muted">Decide qué categorías son libres y cuáles necesitan key para desbloquear sus patches.</p></div></div>
               <div id="categoryAccessList" class="categoryList"></div>
               <p id="categoryAccessStatus" class="notice" role="status"></p>
-              <p class="fieldHint">Aviso: la IPA actual bloquea todos los patches, incluso categorías marcadas libres. La opción libre necesita compatibilidad en la IPA; este paquete solamente actualiza el panel.</p>
+              <p class="fieldHint">Se requiere la IPA NEXUS V3 y publicar los cambios para aplicar «Libre / Con key» en el iPhone.</p>
             </div>
 <div class="categoryPasswordBox">
                 <h3>3. Administrar licencias por categoría</h3>
@@ -219,15 +219,8 @@
                 <label>Categoría<select id="quickKeyCategorySelect"></select></label>
                 <button id="goCreateCategoryKeys" type="button" class="primary">Gestionar keys de esta categoría →</button>
                 <p id="quickKeyCategoryStatus" class="notice" role="status">Al generar keys, Supabase guarda el permiso de la categoría seleccionada.</p>
-                <p class="fieldHint">Nota: este panel no cambia los requisitos de la IPA; algunas versiones también solicitan contraseña.</p>
-                <details class="legacyPasswordSettings">
-                  <summary>Compatibilidad: IPA que todavía solicita contraseña</summary>
-                  <p class="muted">La versión actual de la IPA puede seguir solicitando contraseña además de la key. Esta opción solo se conserva por compatibilidad; no se ha modificado la IPA.</p>
-                  <label>Categoría<select id="passwordCategorySelect"></select></label>
-                  <label>Contraseña de compatibilidad<input id="categoryAccessPassword" type="password" minlength="12" maxlength="128" autocomplete="new-password" /></label>
-                  <button id="saveCategoryPassword" type="button" class="ghost">Guardar contraseña de compatibilidad</button>
-                  <p id="categoryPasswordStatus" class="notice" role="status"></p>
-                </details>
+                <p class="fieldHint">Las categorías protegidas usan una sola key validada en Supabase en la nueva IPA.</p>
+
               </div>
             <div class="visualEditorHeader tabEditorHeader">
               <div><h3>Pestañas inferiores</h3><p class="muted">Estas son Inicio, Archivos, Instalación, Redes y las nuevas categorías.</p></div>
@@ -279,7 +272,7 @@
               <select id="keyContentInput">
                 <option value="">Selecciona una categoría</option>
               </select>
-              <span class="fieldHint">Solo categorías con protección activada. La IPA actual puede pedir contraseña adicional.</span>
+              <span class="fieldHint">Solo categorías con protección activada. Cada key desbloquea toda la categoría.</span>
             </label>
             <label>
               Key personalizada
@@ -380,6 +373,6 @@
       </article>
     </template>
 
-    <script type="module" src="./app.js?v=20261023-cuatro-apartados"></script>
+    <script type="module" src="./app.js?v=20261023-categoria-ipav3"></script>
   </body>
 </html>
