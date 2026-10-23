@@ -480,6 +480,13 @@ private struct NexusMoreTabsSheet: View {
 private struct NexusCategoryTabView: View {
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
     let category: NexusAppCategory
+    @State private var showCategoryUnlock = false
+    @State private var unlockedInThisView = false
+
+    private var categoryLocked: Bool {
+        category.contentType == "patch" && category.requiresKey &&
+        !unlockedInThisView && !ContentLicenseStore.hasAccess(category: category.id)
+    }
 
     private var childCategories: [NexusAppCategory] {
         remoteContentStore.appContent.categories
@@ -563,11 +570,48 @@ private struct NexusCategoryTabView: View {
                             .nexusEntrance(index: 1)
                         }
                     } else {
-                        ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
-                            GreegPanel {
-                                RemoteFileMiniRow(file: file, tint: AppTheme.accent)
+                        ZStack {
+                            VStack(spacing: 10) {
+                                ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
+                                    GreegPanel {
+                                        RemoteFileMiniRow(file: file, tint: AppTheme.accent)
+                                    }
+                                    .nexusEntrance(index: index + (childCategories.isEmpty ? 1 : 2))
+                                }
                             }
-                            .nexusEntrance(index: index + (childCategories.isEmpty ? 1 : 2))
+                            .blur(radius: categoryLocked ? 7 : 0)
+                            .opacity(categoryLocked ? 0.64 : 1)
+                            .allowsHitTesting(!categoryLocked)
+                            if categoryLocked {
+                                GreegPanel {
+                                    VStack(spacing: 12) {
+                                        Image(systemName: "lock.shield.fill")
+                                            .font(.system(size: 31))
+                                            .foregroundStyle(NexusTheme.blueBright)
+                                        Text("Categoría protegida")
+                                            .font(.headline.weight(.black))
+                                        Text("Puedes ver sus patches, pero necesitas una key válida para utilizarlos.")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                            .multilineTextAlignment(.center)
+                                        Button("Introducir key de esta categoría") {
+                                            showCategoryUnlock = true
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(NexusTheme.blue)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(14)
+                                }
+                                .padding(.horizontal, 5)
+                            }
+                        }
+                        .sheet(isPresented: $showCategoryUnlock) {
+                            if let firstFile = files.first {
+                                ContentKeyUnlockView(file: firstFile) {
+                                    unlockedInThisView = true
+                                    remoteContentStore.syncIfPossible(force: true)
+                                }
+                            }
                         }
                     }
                 }
@@ -1082,7 +1126,7 @@ private struct RemoteFileMiniRow: View {
     }
 
     private var hasFileAccess: Bool {
-        !file.requiresKey || ContentLicenseStore.hasAccess(category: file.category)
+        !remoteContentStore.requiresKey(for: file) || ContentLicenseStore.hasAccess(category: file.category)
     }
 
     var body: some View {
@@ -1241,7 +1285,6 @@ private struct ContentKeyUnlockView: View {
     let file: RemoteContentFile
     let onUnlocked: () -> Void
     @State private var key = ""
-    @State private var categoryPassword = ""
     @State private var message = ""
     @State private var isLoading = false
 
@@ -1258,11 +1301,6 @@ private struct ContentKeyUnlockView: View {
                     SecureField("NEXUS-XXXX-XXXX", text: $key)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
-                    SecureField("Contraseña de la categoría", text: $categoryPassword)
-                        .textContentType(.password)
-                        .autocorrectionDisabled()
-                    Text("Esta contraseña la configura el administrador y es diferente de la key.")
-                        .font(.caption).foregroundStyle(.secondary)
                     if !message.isEmpty {
                         Text(message).font(.footnote).foregroundStyle(.red)
                     }
@@ -1293,7 +1331,7 @@ private struct ContentKeyUnlockView: View {
         message = ""
         Task {
             do {
-                _ = try await ContentLicenseStore.activate(key: key, fileID: file.id, category: file.category, password: categoryPassword)
+                _ = try await ContentLicenseStore.activate(key: key, fileID: file.id, category: file.category)
                 await MainActor.run {
                     onUnlocked()
                     dismiss()
