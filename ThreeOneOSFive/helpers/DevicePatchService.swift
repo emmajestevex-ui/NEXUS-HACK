@@ -21,6 +21,35 @@ enum DevicePatchService {
         }
     }
 
+    /// Switches a patch that targets files currently occupied by another
+    /// NEXUS patch. Existing patches are restored through their verified
+    /// journals, so the new patch snapshots ORIGINAL files, not patched ones.
+    /// If any prior target differs unexpectedly, abort without overwriting it.
+    /// On a new apply failure, files already restored remain original.
+    static func applyReplacingConflicts(project: PatchProject) throws -> PatchTransactionReceipt {
+        let backupRoot = try PatchProjectLibrary.backupRootURL()
+        let effective = try withResolvedContainers(bundleIDs: orderedBundleIdentifiers(in: project)) { roots in
+            projectUsingInstalledAssetIndexerPathIfNeeded(project, roots: roots)
+        }
+        let conflicts = try PatchTransaction.conflictingReceipts(
+            for: effective, backupRoot: backupRoot
+        )
+        // Preflight every conflicting project before modifying any file.
+        for receipt in conflicts {
+            let inspection = try inspectRestore(receipt: receipt)
+            guard inspection.changedTargets.isEmpty else {
+                throw PatchPackageError.restoreTargetsChanged(
+                    inspection.changedTargets.map(\.displayPath)
+                )
+            }
+        }
+        // Do not set allowChangedTargets = true. Never overwrite external edits.
+        for receipt in conflicts {
+            try restore(receipt: receipt)
+        }
+        return try apply(project: effective)
+    }
+
     static func inspectRestore(receipt: PatchTransactionReceipt) throws -> PatchRestoreInspection {
         let bundleIDs = try PatchTransaction.requiredBundleIdentifiers(for: receipt)
         return try withResolvedContainers(bundleIDs: bundleIDs) { roots in
