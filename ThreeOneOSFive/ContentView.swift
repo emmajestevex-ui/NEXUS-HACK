@@ -1636,8 +1636,10 @@ private func remotePatchErrorMessage(_ error: PatchPackageError) -> String {
         return "La app destino no está instalada o no se puede abrir: \(bundleID)."
     case .projectAlreadyApplied:
         return "Este patch ya está activo. Pulsa Original para volver atrás."
-    case .targetOccupied(let path):
-        return "El destino ya está ocupado por otro patch: \(path)."
+    case .targetOccupied:
+        return "Hay otro patch en esa ubicación y no se pudo cerrar su operación anterior. No se sobrescribió ningún archivo."
+    case .restoreTargetsChanged:
+        return "El archivo activo cambió fuera de NEXUS. Por seguridad, no se sobrescribió; restaura o revisa ese patch antes de continuar."
     default:
         return error.localizedDescription
     }
