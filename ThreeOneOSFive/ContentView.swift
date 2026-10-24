@@ -565,34 +565,6 @@ private struct NexusCategoryTabView: View {
                         .nexusEntrance(index: 1)
                     }
 
-                    if files.contains(where: {
-                        $0.fileName.lowercased().hasSuffix(".3105") ||
-                        $0.mimeType?.lowercased() == "application/vnd.greeg.3105"
-                    }) {
-                        NavigationLink {
-                            PatchProjectsView()
-                        } label: {
-                            GreegPanel {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "shippingbox.fill")
-                                        .font(.title3.weight(.semibold))
-                                        .foregroundStyle(NexusTheme.blueBright)
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Mis paquetes .3105 importados")
-                                            .font(.headline.weight(.bold))
-                                        Text("Abrir biblioteca, desbloquear y utilizar")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .foregroundStyle(NexusTheme.blueBright)
-                                }
-                            }
-                        }
-                        .buttonStyle(NexusPressStyle())
-                    }
-
                     if files.isEmpty {
                         if childCategories.isEmpty {
                             GreegPanel {
