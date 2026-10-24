@@ -284,12 +284,23 @@ private struct MembershipDetailRow: View {
 private struct NexusSupportView: View {
     let socials: [NexusAppSocial]
 
+    // Canonical support invitations remain visible with old manifests.
     private var supportLinks: [NexusAppSocial] {
-        if let discord = socials.first(where: { $0.title.localizedCaseInsensitiveContains("discord") }) {
-            return [discord]
-        }
-        return [
-            NexusAppSocial(title: "Discord", subtitle: "Soporte y comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue")
+        [
+            NexusAppSocial(
+                title: "Discord de la app",
+                subtitle: "Soporte oficial y ayuda de NEXUS",
+                url: "https://discord.gg/tz87yCBgq",
+                icon: "bubble.left.and.bubble.right.fill",
+                color: "blue"
+            ),
+            NexusAppSocial(
+                title: "Discord de la comunidad",
+                subtitle: "Comunidad NEXUS",
+                url: "https://discord.gg/9NUBpqNGQ",
+                icon: "person.3.fill",
+                color: "blue"
+            )
         ]
     }
 
@@ -479,6 +490,8 @@ private struct NexusMoreTabsSheet: View {
 
 private struct NexusCategoryTabView: View {
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
+    @EnvironmentObject private var patchProjectStore: PatchProjectStore
+    @Environment(\.appLanguage) private var language
     let category: NexusAppCategory
     @State private var showCategoryUnlock = false
     @State private var unlockedInThisView = false
@@ -622,6 +635,14 @@ private struct NexusCategoryTabView: View {
             .background(NexusBackground { Color.clear }.ignoresSafeArea())
             .navigationTitle(category.title)
             .navigationBarTitleDisplayMode(.inline)
+            .patchStorePresentation(patchProjectStore)
+            .alert(item: $patchProjectStore.alert) { message in
+                Alert(
+                    title: Text(language.text(message.titleKey)),
+                    message: Text(message.message(language: language)),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
         }
     }
 }
@@ -1191,6 +1212,7 @@ private struct NexusFullTextDetailView: View {
 
 private struct RemoteFileMiniRow: View {
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
+    @EnvironmentObject private var patchProjectStore: PatchProjectStore
     @State private var isWorking = false
     @State private var actionAlert: GreegPatchActionAlert?
     @State private var showKeySheet = false
@@ -1209,6 +1231,11 @@ private struct RemoteFileMiniRow: View {
 
     private var hasFileAccess: Bool {
         !remoteContentStore.requiresKey(for: file) || ContentLicenseStore.hasAccess(category: file.category)
+    }
+
+    private var isExportedPackage: Bool {
+        file.fileName.lowercased().hasSuffix(".3105")
+          || file.mimeType?.lowercased() == "application/vnd.greeg.3105"
     }
 
     private var readableText: String {
@@ -1252,7 +1279,7 @@ private struct RemoteFileMiniRow: View {
                     .frame(width: 26, height: 44)
                     .accessibilityHidden(true)
             } else {
-                Button(action: { hasFileAccess ? togglePatch() : (showKeySheet = true) }) {
+                Button(action: { hasFileAccess ? (isExportedPackage ? importExportedPackage() : togglePatch()) : (showKeySheet = true) }) {
                     HStack(spacing: 5) {
                         if isWorking {
                             ProgressView()
@@ -1262,7 +1289,9 @@ private struct RemoteFileMiniRow: View {
                                   ? (isApplied ? "arrow.uturn.backward.circle.fill" : "checkmark.circle.fill")
                                   : "lock.fill")
                         }
-                        Text(hasFileAccess ? (isApplied ? "Original" : "Aplicar") : "Desbloquear")
+                        Text(hasFileAccess
+                            ? (isExportedPackage ? "Importar .3105" : (isApplied ? "Original" : "Aplicar"))
+                            : "Desbloquear")
                     }
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.white)
@@ -1314,6 +1343,34 @@ private struct RemoteFileMiniRow: View {
                 title: Text(alert.title),
                 message: Text(alert.message),
                 dismissButton: .default(Text("OK"))
+            )
+        }
+    }
+
+    private func importExportedPackage() {
+        // A .3105 contains its own patch rules. Never copy its raw envelope
+        // to a game asset path as if it were an individual replacement file.
+        guard let localURL = RemoteContentLibrary.localFileURL(for: file),
+              let data = try? Data(contentsOf: localURL) else {
+            actionAlert = GreegPatchActionAlert(
+                title: "Sincroniza el paquete",
+                message: "Descarga primero el .3105 desde NEXUS."
+            )
+            return
+        }
+        do {
+            _ = try PatchPackageCodec.inspect(data)
+            guard patchProjectStore.importPackage(data: data) else {
+                actionAlert = GreegPatchActionAlert(
+                    title: "Importación ocupada",
+                    message: "La biblioteca está procesando otro paquete."
+                )
+                return
+            }
+        } catch {
+            actionAlert = GreegPatchActionAlert(
+                title: "Paquete no válido",
+                message: "No es un archivo .3105 compatible con NEXUS."
             )
         }
     }
