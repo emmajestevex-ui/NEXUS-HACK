@@ -519,6 +519,47 @@ enum PatchTransaction {
         }
     }
 
+    /// Returns active receipts that overlap the requested replacement paths.
+    /// Incomplete (prepared) journals are never switched automatically because
+    /// they might represent an interrupted transaction requiring recovery.
+    static func conflictingReceipts(
+        for project: PatchProject,
+        backupRoot: URL,
+        fileManager: FileManager = .default
+    ) throws -> [PatchTransactionReceipt] {
+        let requested = Set(project.rules.map { $0.bundleID + "\0" + $0.relativePath })
+        guard !requested.isEmpty else { return [] }
+        guard let directories = try? fileManager.contentsOfDirectory(
+            at: backupRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+        var conflicts: [(Date, PatchTransactionReceipt)] = []
+        for directory in directories {
+            guard let projectID = UUID(uuidString: directory.lastPathComponent),
+                  projectID != project.id,
+                  let receipt = latestReceipt(
+                    projectID: projectID,
+                    backupRoot: backupRoot,
+                    fileManager: fileManager
+                  ),
+                  let journal = try? readJournal(receipt.journalURL)
+            else { continue }
+            let shared = journal.records.first {
+                requested.contains($0.bundleID + "\0" + $0.relativePath)
+            }
+            guard let overlap = shared else { continue }
+            guard journal.status == .applied else {
+                throw PatchPackageError.targetOccupied(
+                    overlap.bundleID + "/" + overlap.relativePath
+                )
+            }
+            conflicts.append((journal.createdAt, receipt))
+        }
+        // Restore newest applied patch first if an older build left overlaps.
+        return conflicts.sorted { $0.0 > $1.0 }.map(\.1)
+    }
+
     static func appliedTargetKeys(
         backupRoot: URL,
         excludingProjectID: UUID? = nil,
