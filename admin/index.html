@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="Cache-Control" content="no-store" />
     <title>NEXUS Admin</title>
-    <link rel="stylesheet" href="./styles.css?v=20261023-categoria-ipav3" />
+    <link rel="stylesheet" href="./styles.css?v=20261024-3105-support" />
   </head>
   <body>
     <main class="shell">
@@ -52,6 +52,7 @@
         <button type="button" class="adminNavItem" data-admin-target="categories" aria-pressed="false"><span class="adminNavNumber">02</span><span><strong>Categorías</strong><small>Elegir libres o con key</small></span></button>
         <button type="button" class="adminNavItem" data-admin-target="keys" aria-pressed="false"><span class="adminNavNumber">03</span><span><strong>Keys de categorías</strong><small>Solo categorías protegidas</small></span></button>
         <button type="button" class="adminNavItem" data-admin-target="app-keys" aria-pressed="false"><span class="adminNavNumber">04</span><span><strong>Keys de la app</strong><small>Licencias normales de NEXUS</small></span></button>
+        <button type="button" class="adminNavItem" data-admin-target="packages" aria-pressed="false"><span class="adminNavNumber">05</span><span><strong>Paquetes .3105</strong><small>Importar y asignar paquetes completos</small></span></button>
       </nav>
       <section id="adminPanel" class="grid hidden">
         <aside class="panel" data-admin-view="patches">
@@ -333,6 +334,50 @@
           </div>
           <div id="appKeyList" class="fileList"></div>
         </section>
+        <section class="panel fullWidth packageImporter" data-admin-view="packages">
+          <div class="panelHeader">
+            <div>
+              <h2>Paquetes .3105 exportados</h2>
+              <p class="muted">Sube un paquete de 3105 sin convertirlo. Incluye sus reglas y rutas de destino. NEXUS lo importará en el iPhone y pedirá su contraseña si la necesita.</p>
+            </div>
+            <button type="button" id="packageRefreshButton" class="ghost">Actualizar opciones</button>
+          </div>
+          <form id="exportedPackageForm" class="form packageImportGrid">
+            <label>
+              Archivo .3105 ya exportado
+              <input id="packageFileInput" type="file" accept=".3105,application/octet-stream" required />
+              <span class="fieldHint">Formato 3105PATCH de NEXUS. No subas un assetindexer suelto aquí.</span>
+            </label>
+            <label>
+              Ubicar en categoría o subcarpeta
+              <select id="packageCategoryInput" required></select>
+              <span class="fieldHint">Elige una categoría de patches existente, incluso dentro de un contenedor.</span>
+            </label>
+            <label>
+              ¿Crear un patch o reemplazar uno existente?
+              <select id="packagePlacementInput"><option value="">Crear patch nuevo en esta categoría</option></select>
+              <span class="fieldHint">Reemplazar actualiza solo ese patch. No cambia los demás.</span>
+            </label>
+            <label>
+              Nombre que verán los usuarios
+              <input id="packageNameInput" maxlength="80" placeholder="Se rellena desde el archivo" required />
+            </label>
+            <label>
+              Precio de referencia (USD)
+              <input id="packagePriceInput" type="number" min="0.01" step="0.01" value="15.00" />
+            </label>
+            <label class="checkLabel">
+              <input id="packageEncryptInput" type="checkbox" checked />
+              Cifrado adicional AES-256-GCM en Supabase
+              <span class="fieldHint">Necesita desplegar nexus-secure-patch. Los .3105 ya tienen un contenedor cifrado, pero la protección adicional restringe su distribución.</span>
+            </label>
+            <button type="submit" id="packageSaveButton" class="primary">Guardar paquete .3105</button>
+          </form>
+          <p id="packageStatusText" class="notice" role="status">Elige el paquete .3105 y la categoría antes de guardar.</p>
+          <div class="packageInfo">Las rutas originales y archivos de reemplazo están dentro del paquete. La IPA mostrará <strong>Importar .3105</strong> y el paquete se instalará en la biblioteca. <strong>No</strong> se copia directamente sobre assetindexer.</div>
+          <div class="toolbar"><h3>Paquetes existentes</h3></div>
+          <div id="packageList" class="fileList"></div>
+        </section>
       </section>
     </main>
 
@@ -378,6 +423,6 @@
       </article>
     </template>
 
-    <script type="module" src="./app.js?v=20261023-secure-patches"></script>
+    <script type="module" src="./app.js?v=20261024-3105-support"></script>
   </body>
 </html>
