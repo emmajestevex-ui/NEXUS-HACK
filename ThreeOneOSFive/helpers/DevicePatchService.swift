@@ -1,7 +1,13 @@
 import Foundation
 
 enum DevicePatchService {
+    // Serialize all patch transactions: a concurrent tap cannot race with
+    // the restore/switch process or corrupt another patch's backup.
+    private static let transactionLock = NSRecursiveLock()
+
     static func apply(project: PatchProject) throws -> PatchTransactionReceipt {
+        transactionLock.lock()
+        defer { transactionLock.unlock() }
         let bundleIDs = orderedBundleIdentifiers(in: project)
         return try withResolvedContainers(bundleIDs: bundleIDs) { roots in
             let effectiveProject = projectUsingInstalledAssetIndexerPathIfNeeded(
@@ -27,6 +33,8 @@ enum DevicePatchService {
     /// If any prior target differs unexpectedly, abort without overwriting it.
     /// On a new apply failure, files already restored remain original.
     static func applyReplacingConflicts(project: PatchProject) throws -> PatchTransactionReceipt {
+        transactionLock.lock()
+        defer { transactionLock.unlock() }
         let backupRoot = try PatchProjectLibrary.backupRootURL()
         let effective = try withResolvedContainers(bundleIDs: orderedBundleIdentifiers(in: project)) { roots in
             projectUsingInstalledAssetIndexerPathIfNeeded(project, roots: roots)
@@ -69,6 +77,8 @@ enum DevicePatchService {
         receipt: PatchTransactionReceipt,
         allowChangedTargets: Bool = false
     ) throws {
+        transactionLock.lock()
+        defer { transactionLock.unlock() }
         let bundleIDs = try PatchTransaction.requiredBundleIdentifiers(for: receipt)
         try withResolvedContainers(bundleIDs: bundleIDs) { roots in
             try PatchTransaction.restore(
