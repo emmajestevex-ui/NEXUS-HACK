@@ -4,7 +4,7 @@ const SUPABASE_URL = "https://oxtyyazqagmfhkgprpsp.supabase.co";
 const SUPABASE_KEY = "sb_publishable_IEtNXoVHdutPKd4g_ej0MA_IF-yXUR8";
 const BUCKET = "nexus-hack-content";
 const UI_BUCKET = "nexus-hack-ui";
-const SCRIPT_VERSION = "20261019-3105-import";
+const SCRIPT_VERSION = "20261024-3105-support";
 const DEFAULT_TARGET_BUNDLE = "com.dts.freefireth";
 const FREE_FIRE_MAX_BUNDLE = "com.dts.freefiremax";
 const ASSET_INDEXER_DIRECTORY = "Documents/contentcache/Compulsory/ios/gameassetbundles/avatar";
@@ -271,6 +271,11 @@ function bindEvents() {
   els.resetPasswordButton.addEventListener("click", resetPassword);
   els.signOutButton.addEventListener("click", signOut);
   els.fileForm.addEventListener("submit", saveFile);
+  document.querySelector("#exportedPackageForm")?.addEventListener("submit", saveExportedPackage);
+  document.querySelector("#packageCategoryInput")?.addEventListener("change", () => renderExportedPackageOptions(true));
+  document.querySelector("#packagePlacementInput")?.addEventListener("change", updateExportedPackagePlacement);
+  document.querySelector("#packageFileInput")?.addEventListener("change", suggestExportedPackageName);
+  document.querySelector("#packageRefreshButton")?.addEventListener("click", () => { renderExportedPackageOptions(); loadFiles(); });
   els.newButton.addEventListener("click", resetForm);
   els.refreshButton.addEventListener("click", loadFiles);
   els.publishButton.addEventListener("click", publishChanges);
@@ -466,7 +471,7 @@ function setSession(session) {
 }
 
 function setAdminView(target = "patches", updateHash = true) {
-  const view = ["patches", "categories", "keys", "app-keys"].includes(target) ? target : "patches";
+  const view = ["patches", "categories", "keys", "app-keys", "packages"].includes(target) ? target : "patches";
   state.activeAdminView = view;
   document.querySelectorAll("[data-admin-view]").forEach(panel => panel.classList.toggle("hidden", panel.dataset.adminView !== view));
   document.querySelectorAll("[data-admin-target]").forEach(button => {
@@ -492,6 +497,7 @@ async function loadFiles() {
   }
 
   state.files = (data ?? []).filter(isGreegFile);
+  renderExportedPackageOptions();
   refreshKeyContentOptions();
   renderCategoryEditor();
   setStatus("Listo. Recuerda publicar para que los iPhone reciban los cambios.");
@@ -535,7 +541,8 @@ const DEFAULT_APP_CONTENT = {
     { id: "support", title: "Soporte", icon: "headphones.circle.fill", kind: "support", enabled: true, sort_order: 5 }
   ],
   socials: [
-    { title: "Discord", subtitle: "Comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
+    { title: "Discord de la app", subtitle: "Soporte oficial de NEXUS", url: "https://discord.gg/tz87yCBgq", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
+    { title: "Discord de la comunidad", subtitle: "Comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "person.3.fill", color: "blue" },
     { title: "TikTok", subtitle: "@tumbado_sensi7", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black" }
   ]
 };
@@ -548,13 +555,23 @@ async function loadSettings() {
     els.settingsStatusText.textContent = adminErrorMessage(error);
     return;
   }
-  state.appContent = data || structuredClone(DEFAULT_APP_CONTENT);
+  state.appContent = addNexusDiscordLinks(data || structuredClone(DEFAULT_APP_CONTENT));
   if (!Array.isArray(state.appContent.tabs) || state.appContent.tabs.length === 0) {
     state.appContent.tabs = structuredClone(DEFAULT_APP_CONTENT.tabs);
   }
   els.settingsInput.value = JSON.stringify(state.appContent, null, 2);
   renderCategoryEditor();
   els.settingsStatusText.textContent = "Diseno cargado. Puedes editar categorias, subcategorias, anuncios y redes.";
+}
+
+function addNexusDiscordLinks(content) {
+  const links = Array.isArray(content.socials) ? content.socials : [];
+  const required = [
+    { title: "Discord de la app", subtitle: "Soporte oficial de NEXUS", url: "https://discord.gg/tz87yCBgq", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
+    { title: "Discord de la comunidad", subtitle: "Comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "person.3.fill", color: "blue" }
+  ];
+  const urls = new Set(required.map(x => x.url.toLowerCase()));
+  return { ...content, socials: [...required, ...links.filter(x => !urls.has(String(x.url || "").toLowerCase()))] };
 }
 
 const BUILTIN_CATEGORY_CHOICES = [
@@ -955,6 +972,7 @@ async function saveSettings() {
     return;
   }
   if (!Array.isArray(content.tabs) || content.tabs.length === 0) content.tabs = structuredClone(DEFAULT_APP_CONTENT.tabs);
+  content = addNexusDiscordLinks(content);
   state.appContent = content;
   renderCategoryEditor();
   setBusy(true, "Guardando diseno remoto...");
@@ -1156,7 +1174,7 @@ function syncCustomKeyQuantity() {
   }
 }
 
-async function saveFile(event) {
+async function saveFile(event, providedFile = null) {
   event.preventDefault();
   if (!state.session || state.busy) return;
 
@@ -1170,7 +1188,7 @@ async function saveFile(event) {
   }
   const textBody = els.textContentInput.value.trim();
   const packageMode = contentType === "patch" && els.importedPackageInput.checked;
-  let file = els.fileInput.files?.[0] || null;
+  let file = providedFile || els.fileInput.files?.[0] || null;
   if (contentType === "text") {
     if (!textBody) {
       setStatus("Escribe el contenido de texto antes de publicar.");
@@ -1302,6 +1320,7 @@ async function saveFile(event) {
       ? `${contentType === "text" ? "Texto" : "Patch"} reemplazado. Pulsa Publicar cambios cuando estes listo.`
       : `${contentType === "text" ? "Texto" : "Patch"} nuevo creado. Pulsa Publicar cambios cuando estes listo.`
     );
+    return true;
   } catch (error) {
     const message = adminErrorMessage(error);
     setStatus(message);
