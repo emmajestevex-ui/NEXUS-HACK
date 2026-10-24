@@ -721,6 +721,7 @@ private struct GreegHomeView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
     @EnvironmentObject private var store: PatchProjectStore
+    @Environment(\.appLanguage) private var language
     @AppStorage("greeg.license.supabaseUnlocked") private var isUnlocked = false
     let onSignOut: () -> Void
     let onOpenMembership: () -> Void
@@ -777,6 +778,14 @@ private struct GreegHomeView: View {
             }
             .onChange(of: remoteContentStore.remoteVersion) { _ in
                 store.reload()
+            }
+            .patchStorePresentation(store)
+            .alert(item: $store.alert) { message in
+                Alert(
+                    title: Text(language.text(message.titleKey)),
+                    message: Text(message.message(language: language)),
+                    dismissButton: .default(Text("OK"))
+                )
             }
         }
     }
