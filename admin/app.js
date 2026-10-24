@@ -696,6 +696,7 @@ function updatePackageMode() {
 }
 
 function renderCategoryEditor() {
+  renderExportedPackageOptions();
   refreshKeyContentOptions();
   const content = state.appContent || DEFAULT_APP_CONTENT;
   const categories = Array.isArray(content.categories) ? content.categories : [];
@@ -1327,6 +1328,146 @@ async function saveFile(event, providedFile = null) {
     window.alert(message);
   } finally {
     setBusy(false);
+  }
+}
+
+
+function renderExportedPackageOptions(resetPlacement = false) {
+  const catSelect = document.querySelector("#packageCategoryInput");
+  const placeSelect = document.querySelector("#packagePlacementInput");
+  if (!catSelect || !placeSelect) return;
+
+  const selectedCategory = catSelect.value;
+  const selectedPatch = resetPlacement ? "" : placeSelect.value;
+  const choices = allCategoryChoices().filter(c => categoryContentType(c) === "patch")
+    .sort((a, b) => categoryPath(a.id, allCategoryChoices()).localeCompare(categoryPath(b.id, allCategoryChoices()), "es"));
+  catSelect.replaceChildren();
+  choices.forEach(c => catSelect.add(new Option(categoryPath(c.id, allCategoryChoices()), c.id)));
+  if (choices.some(c => c.id === selectedCategory)) catSelect.value = selectedCategory;
+  const existing = state.files.filter(f => !f.deleted_at && f.category === catSelect.value)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), "es"));
+  placeSelect.replaceChildren(new Option("Crear patch nuevo en esta categoría", ""));
+  existing.forEach(f => placeSelect.add(new Option("Reemplazar: " + f.name + " (" + f.file_name + ")", f.id)));
+  if (existing.some(f => f.id === selectedPatch)) placeSelect.value = selectedPatch;
+  renderExportedPackageList();
+}
+
+function renderExportedPackageList() {
+  const list = document.querySelector("#packageList");
+  if (!list) return;
+  const packages = state.files.filter(file => !file.deleted_at &&
+    (String(file.file_name || "").toLowerCase().endsWith(".3105") ||
+     String(file.mime_type || "").toLowerCase() === "application/vnd.greeg.3105"));
+  list.replaceChildren();
+  if (!packages.length) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "Todavía no hay paquetes .3105 registrados.";
+    list.appendChild(p);
+    return;
+  }
+  packages.forEach(file => {
+    const article = document.createElement("article");
+    article.className = "packageEntry";
+    const details = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = file.name;
+    const sub = document.createElement("small");
+    sub.textContent = categoryPath(file.category, allCategoryChoices()) + " · " + file.file_name;
+    const status = document.createElement("small");
+    status.textContent = file.published_at ? "Publicado" : "Pendiente de publicar";
+    details.append(title, sub, status);
+    const button = document.createElement("button");
+    button.className = "ghost";
+    button.type = "button";
+    button.textContent = "Reemplazar";
+    button.addEventListener("click", () => {
+      const select = document.querySelector("#packageCategoryInput");
+      select.value = file.category;
+      renderExportedPackageOptions();
+      document.querySelector("#packagePlacementInput").value = file.id;
+      updateExportedPackagePlacement();
+      document.querySelector("#packageFileInput").focus();
+    });
+    article.append(details, button);
+    list.appendChild(article);
+  });
+}
+
+function updateExportedPackagePlacement() {
+  const selectedID = document.querySelector("#packagePlacementInput")?.value;
+  const existing = state.files.find(file => file.id === selectedID);
+  if (existing) {
+    document.querySelector("#packageNameInput").value = existing.name;
+    document.querySelector("#packagePriceInput").value = Number(existing.price_usd || 15).toFixed(2);
+  } else {
+    suggestExportedPackageName();
+  }
+}
+
+function suggestExportedPackageName() {
+  if (document.querySelector("#packagePlacementInput")?.value) return;
+  const file = document.querySelector("#packageFileInput")?.files?.[0];
+  if (file) document.querySelector("#packageNameInput").value =
+    file.name.replace(/\.3105$/i, "").replace(/[_-]+/g, " ").trim().slice(0, 80);
+}
+
+async function isCompatibleExported3105(file) {
+  if (!file || !is3105File(file) || file.size < 20) return false;
+  // Matches PatchPackageCodec.magic in the iOS Swift application: 3105PATCH + NUL.
+  const header = new Uint8Array(await file.slice(0, 10).arrayBuffer());
+  const expected = [51, 49, 48, 53, 80, 65, 84, 67, 72, 0];
+  return expected.every((byte, index) => header[index] === byte);
+}
+
+async function saveExportedPackage(event) {
+  event.preventDefault();
+  const status = document.querySelector("#packageStatusText");
+  const file = document.querySelector("#packageFileInput")?.files?.[0];
+  if (!state.session) { status.textContent = "Inicia sesión como administrador."; return; }
+  if (state.busy) { status.textContent = "Hay otra operación en curso."; return; }
+  if (!(await isCompatibleExported3105(file))) {
+    status.textContent = "Archivo incompatible: selecciona un .3105 real exportado desde NEXUS/3105, no un assetindexer.";
+    return;
+  }
+  const category = document.querySelector("#packageCategoryInput").value;
+  const cat = allCategoryChoices().find(c => c.id === category);
+  if (!cat || categoryContentType(cat) !== "patch") {
+    status.textContent = "Elige una categoría de patches o una subcategoría.";
+    return;
+  }
+  const existingID = document.querySelector("#packagePlacementInput").value;
+  const existing = existingID ? state.files.find(f => f.id === existingID && !f.deleted_at) : null;
+  if (existingID && (!existing || existing.category !== category)) {
+    status.textContent = "El patch elegido ya no pertenece a esta categoría.";
+    return;
+  }
+  const name = document.querySelector("#packageNameInput").value.trim();
+  if (!name) { status.textContent = "Pon un nombre al patch."; return; }
+  const slug = existing?.slug || safeSlug(name + "-" + crypto.randomUUID().slice(0, 8));
+  // Metadata-only logical path: the real destinations are inside the .3105.
+  const logicalPath = "packages/3105/" + slug + "/" + safeStorageFileName(file.name);
+  els.editingId.value = existing?.id || "";
+  els.nameInput.value = name;
+  els.slugInput.value = slug;
+  els.slugInput.dataset.touched = "true";
+  els.categoryInput.value = category;
+  els.importedPackageInput.checked = true;
+  els.targetBundleInput.value = existing?.target_bundle || DEFAULT_TARGET_BUNDLE;
+  els.targetPathInput.value = logicalPath.slice(0, 180);
+  els.targetPathInput.dataset.touched = "true";
+  els.descriptionInput.value = existing?.description || "Paquete .3105 completo: las rutas reales se encuentran dentro del archivo.";
+  els.priceUSDInput.value = document.querySelector("#packagePriceInput").value || "15.00";
+  document.querySelector("#securePatchUpload").checked = document.querySelector("#packageEncryptInput").checked;
+  els.thumbnailInput.value = "";
+  status.textContent = "Verificando y subiendo .3105 sin alterarlo...";
+  const success = await saveFile({ preventDefault() {} }, file);
+  if (success) {
+    status.textContent = "Paquete guardado. Pulsa Publicar cambios en Patches. En el iPhone selecciona Importar .3105.";
+    document.querySelector("#packageFileInput").value = "";
+    renderExportedPackageOptions(true);
+  } else {
+    status.textContent = "No se guardó. " + (document.querySelector("#statusText")?.textContent || "Revisa los detalles de subida.");
   }
 }
 
