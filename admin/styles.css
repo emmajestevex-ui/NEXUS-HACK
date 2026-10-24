@@ -739,3 +739,25 @@ textarea:focus {
 #categoryKeyLabel input{width:20px;height:20px;accent-color:var(--accent)}
 @media(max-width:1000px){.adminNavigation{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:600px){.adminNavigation{grid-template-columns:1fr}.categoryAccessRow{flex-direction:column;align-items:stretch}.categoryAccessToggle{justify-content:center}}
+
+/* NEXUS V3: independent importer for complete exported .3105 packages */
+.packageImporter { display: grid; gap: 18px; }
+.packageImporter .packageImportGrid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px; border: 1px solid var(--line); padding: 20px;
+  border-radius: 13px; background: rgba(39,116,208,.045);
+}
+.packageImporter .packageImportGrid label {display: grid; gap: 7px; min-width: 0;}
+.packageImporter .packageImportGrid .checkLabel {display: flex; flex-wrap: wrap; align-items: center; gap: 10px;}
+.packageImporter .packageImportGrid .checkLabel .fieldHint {flex-basis: 100%;}
+.packageImporter .packageImportGrid .checkLabel input {width: 20px; height: 20px;}
+.packageImporter #packageSaveButton {grid-column: 1 / -1; justify-self: stretch;}
+.packageImporter #packageStatusText {margin: 0;}
+.packageInfo {color: var(--muted); line-height: 1.65; background: #122339; border: 1px solid #2c4465; padding: 14px 18px; border-radius: 11px;}
+.packageEntry {display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:17px; border:1px solid var(--line); border-radius:10px; background:#102035;}
+.packageEntry > div {display:grid; gap:6px; min-width:200px; flex:1;}
+.packageEntry strong {font-size:15px; overflow-wrap:anywhere;}
+.packageEntry small {color: var(--muted); overflow-wrap:anywhere;}
+@media (max-width:740px) {
+  .packageImporter .packageImportGrid {grid-template-columns:1fr; padding:14px;}
+}
