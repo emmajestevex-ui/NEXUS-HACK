@@ -1221,7 +1221,7 @@ private struct NexusFullTextDetailView: View {
 
 // The build pipeline injects the password from GitHub Actions Secrets.
 // Never put the actual .3105 password in this public repository.
-private enum NexusPackageAutomaticPassword {
+enum NexusPackageAutomaticPassword {
     static let value = "__NEXUS_3105_PASSWORD_PLACEHOLDER__"
 }
 
