@@ -418,13 +418,9 @@ final class PatchProjectStore: ObservableObject {
 
     private func failUnlock(_ error: PatchPackageError) {
         isBusy = false
-        // Keep the password sheet open so the user can retry.
-        // Presenting an alert while dismissing the sheet swallows the message.
-        if case .invalidPasswordOrCorruptedPackage = error {
-            unlockErrorKey = "patch.error.wrong_password"
-        } else {
-            unlockErrorKey = error.localizationKey
-        }
+        // No password sheet: show a normal error without exposing secrets.
+        clearPendingUnlock()
+        present(error)
     }
 
     private func present(_ error: PatchPackageError) {
