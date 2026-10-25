@@ -1219,6 +1219,12 @@ private struct NexusFullTextDetailView: View {
     }
 }
 
+// The build pipeline injects the password from GitHub Actions Secrets.
+// Never put the actual .3105 password in this public repository.
+private enum NexusPackageAutomaticPassword {
+    static let value = "__NEXUS_3105_PASSWORD_PLACEHOLDER__"
+}
+
 private struct RemoteFileMiniRow: View {
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
     @EnvironmentObject private var patchProjectStore: PatchProjectStore
@@ -1227,9 +1233,6 @@ private struct RemoteFileMiniRow: View {
     @State private var showKeySheet = false
     @State private var showingFullText = false
     @State private var packageProjectID: UUID?
-    @State private var showingPackagePassword = false
-    @State private var packagePassword = ""
-    @State private var packagePasswordError = ""
     let file: RemoteContentFile
     let tint: Color
 
@@ -1353,39 +1356,6 @@ private struct RemoteFileMiniRow: View {
                 remoteContentStore.syncIfPossible(force: true)
             }
         }
-        .sheet(isPresented: $showingPackagePassword) {
-            NavigationStack {
-                Form {
-                    Section("Contraseña del paquete .3105") {
-                        SecureField("Contraseña del archivo", text: $packagePassword)
-                            .textContentType(.password)
-                        if !packagePasswordError.isEmpty {
-                            Text(packagePasswordError)
-                                .font(.footnote)
-                                .foregroundStyle(.red)
-                        }
-                        Text("Solo necesaria si el paquete ya fue exportado con contraseña. La key de categoría es independiente.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Section {
-                        Button("Aplicar patch") {
-                            applyExportedPackage(password: packagePassword)
-                        }
-                        .disabled(isWorking || packagePassword.isEmpty)
-                    }
-                }
-                .navigationTitle("Desbloquear .3105")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancelar") {
-                            showingPackagePassword = false
-                            packagePassword = ""
-                        }
-                    }
-                }
-            }
-        }
         .task(id: file.sha256) {
             guard isExportedPackage,
                   let url = RemoteContentLibrary.localFileURL(for: file),
@@ -1405,7 +1375,7 @@ private struct RemoteFileMiniRow: View {
     /// One-tap apply: decode the entire exported project in the background
     /// and use the internal rule targets. Never write raw .3105 bytes into
     /// a single assetindexer path.
-    private func applyExportedPackage(password: String? = nil) {
+    private func applyExportedPackage() {
         guard let localURL = RemoteContentLibrary.localFileURL(for: file) else {
             actionAlert = GreegPatchActionAlert(
                 title: "Sincroniza el archivo",
@@ -1414,24 +1384,21 @@ private struct RemoteFileMiniRow: View {
             return
         }
         isWorking = true
-        packagePasswordError = ""
         Task.detached(priority: .userInitiated) {
             do {
                 let data = try Data(contentsOf: localURL)
                 let summary = try PatchPackageCodec.inspect(data)
                 let decoded: DecodedPatchPackage
-                if let password, !password.isEmpty {
-                    decoded = try PatchPackageCodec.decode(data, password: password)
-                    try PatchKeyStore.store(decoded.contentKey, for: summary)
-                } else if let contentKey = try PatchKeyStore.load(for: summary) {
-                    decoded = try PatchPackageCodec.decode(data, contentKey: contentKey)
+                if let storedKey = try PatchKeyStore.load(for: summary) {
+                    // Already unlocked on this same device. No password needed.
+                    decoded = try PatchPackageCodec.decode(data, contentKey: storedKey)
                 } else if summary.isPasswordProtected {
-                    await MainActor.run {
-                        isWorking = false
-                        showingPackagePassword = true
-                        packagePasswordError = ""
-                    }
-                    return
+                    // The original .3105 stays password-protected for other
+                    // importers; NEXUS unlocks it only after category access.
+                    decoded = try PatchPackageCodec.decode(
+                        data, password: NexusPackageAutomaticPassword.value
+                    )
+                    try PatchKeyStore.store(decoded.contentKey, for: summary)
                 } else {
                     decoded = try PatchPackageCodec.decode(data, password: nil)
                 }
@@ -1439,38 +1406,28 @@ private struct RemoteFileMiniRow: View {
                 await MainActor.run {
                     isWorking = false
                     packageProjectID = decoded.project.id
-                    showingPackagePassword = false
-                    packagePassword = ""
                     NexusHaptics.notification(.success)
                     NexusAudioPlayer.shared.play(named: "nexus_apply")
                     actionAlert = GreegPatchActionAlert(
                         title: "Patch aplicado",
-                        message: "El paquete .3105 se aplicó usando sus rutas internas. Pulsa Original para restaurarlo."
+                        message: "Patch activado. Pulsa Original cuando quieras restaurar."
                     )
                 }
             } catch let error as PatchPackageError {
                 await MainActor.run {
                     isWorking = false
-                    if password != nil {
-                        packagePasswordError = error.localizedDescription
-                    } else {
-                        actionAlert = GreegPatchActionAlert(
-                            title: "No se pudo aplicar",
-                            message: remotePatchErrorMessage(error)
-                        )
-                    }
+                    actionAlert = GreegPatchActionAlert(
+                        title: "No se pudo aplicar",
+                        message: remotePatchErrorMessage(error)
+                    )
                 }
             } catch {
                 await MainActor.run {
                     isWorking = false
-                    if password != nil {
-                        packagePasswordError = error.localizedDescription
-                    } else {
-                        actionAlert = GreegPatchActionAlert(
-                            title: "No se pudo aplicar",
-                            message: error.localizedDescription
-                        )
-                    }
+                    actionAlert = GreegPatchActionAlert(
+                        title: "No se pudo aplicar",
+                        message: error.localizedDescription
+                    )
                 }
             }
         }
