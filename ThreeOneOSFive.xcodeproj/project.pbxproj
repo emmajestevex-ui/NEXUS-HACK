@@ -80,6 +80,7 @@
 		3105A228 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 3105A120; };
 		3105A211 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3105A031; };
 		3105N200 /* nexus_intro.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 3105N100; };
+		3105N203 /* nexus_intro_animation.html in Resources */ = {isa = PBXBuildFile; fileRef = 3105N103; };
 		3105N201 /* nexus_apply.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 3105N101; };
 		3105N202 /* nexus_original.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 3105N102; };
 /* End PBXBuildFile section */
@@ -97,6 +98,7 @@
 		3105A030 /* mcm_bridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = mcm_bridge.m; sourceTree = "<group>"; };
 		3105A031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		3105N100 /* nexus_intro.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = nexus_intro.mp3; sourceTree = "<group>"; };
+		3105N103 /* nexus_intro_animation.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = nexus_intro_animation.html; sourceTree = "<group>"; };
 		3105N101 /* nexus_apply.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = nexus_apply.mp3; sourceTree = "<group>"; };
 		3105N102 /* nexus_original.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = nexus_original.mp3; sourceTree = "<group>"; };
 		3105A040 /* bad_query.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bad_query.h; sourceTree = "<group>"; };
@@ -214,6 +216,7 @@
 				3105A120 /* Localizable.strings */,
 				3105A031 /* Assets.xcassets */,
 				3105N100 /* nexus_intro.mp3 */,
+				3105N103 /* nexus_intro_animation.html */,
 				3105N101 /* nexus_apply.mp3 */,
 				3105N102 /* nexus_original.mp3 */,
 				3105K101 /* BundledPatchPayloads */,
@@ -396,6 +399,7 @@
 				3105A211,
 				3105A228,
 				3105N200,
+				3105N203,
 				3105N201,
 				3105N202,
 			);
@@ -498,7 +502,7 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ThreeOneOSFive/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "NEXUS HACK";
+				INFOPLIST_KEY_CFBundleDisplayName = "NEXUS";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -512,7 +516,7 @@
 				MARKETING_VERSION = 1.4.8;
 				OTHER_LDFLAGS = "-lz";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.apple.mobile.MobileHouseArrest";
-				PRODUCT_NAME = NexusHack;
+				PRODUCT_NAME = NEXUS;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "ThreeOneOSFive/ThreeOneOSFive-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -532,7 +536,7 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ThreeOneOSFive/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "NEXUS HACK";
+				INFOPLIST_KEY_CFBundleDisplayName = "NEXUS";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -546,7 +550,7 @@
 				MARKETING_VERSION = 1.4.8;
 				OTHER_LDFLAGS = "-lz";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.apple.mobile.MobileHouseArrest";
-				PRODUCT_NAME = NexusHack;
+				PRODUCT_NAME = NEXUS;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "ThreeOneOSFive/ThreeOneOSFive-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

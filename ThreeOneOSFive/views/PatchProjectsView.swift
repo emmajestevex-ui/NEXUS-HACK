@@ -992,7 +992,7 @@ private struct PatchProjectDetailView: View {
                 let project = item.summary.schemaVersion >= 2 && item.canInspectContents
                     ? try PatchProjectLibrary.synchronizeWorkspace(item: item)
                     : baseProject
-                _ = try DevicePatchService.apply(project: project)
+                _ = try DevicePatchService.applyReplacingConflicts(project: project)
                 await MainActor.run {
                     store.reload()
                     isWorking = false
