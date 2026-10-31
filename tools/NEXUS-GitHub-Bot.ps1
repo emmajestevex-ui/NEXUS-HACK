@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$RepoPath = "",
+    [string]$SourcePath = "",
     [string]$Message = "Actualiza NEXUS",
     [switch]$Watch,
     [int]$IntervalSeconds = 15,
@@ -11,6 +12,9 @@ param(
 $ErrorActionPreference = "Stop"
 if ([string]::IsNullOrWhiteSpace($RepoPath)) {
     $RepoPath = Split-Path -Parent $PSScriptRoot
+}
+if ([string]::IsNullOrWhiteSpace($SourcePath)) {
+    $SourcePath = Split-Path -Parent $PSScriptRoot
 }
 
 function Invoke-Git([string[]]$Arguments) {
@@ -78,12 +82,32 @@ function Open-GitHubDesktop {
     }
 }
 
+function Import-PackageToRepository {
+    if ([IO.Path]::GetFullPath($SourcePath).TrimEnd('\\') -eq [IO.Path]::GetFullPath($RepoPath).TrimEnd('\\')) {
+        return
+    }
+    Write-Host "NEXUS: copiando los archivos nuevos al repositorio GitHub Desktop..."
+    Get-ChildItem -LiteralPath $SourcePath -Force | Where-Object {
+        $_.Name -notin @('.git', 'outputs')
+    } | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination $RepoPath -Recurse -Force
+    }
+    Write-Host "NEXUS: archivos copiados al repositorio correcto."
+}
+
 if (-not (Test-Path -LiteralPath (Join-Path $RepoPath ".git"))) {
-    throw "No encontré un repositorio Git en $RepoPath"
+    $knownRepository = Join-Path $env:LOCALAPPDATA "Temp\NEXUS-HACK-NUEVO"
+    if (Test-Path -LiteralPath (Join-Path $knownRepository ".git")) {
+        $RepoPath = $knownRepository
+        Write-Host "NEXUS: repositorio detectado automáticamente en $RepoPath"
+    } else {
+        throw "No encontré un repositorio Git. Abre este archivo desde NEXUS-HACK-NUEVO o indica -RepoPath con la carpeta correcta."
+    }
 }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     throw "Git no está instalado o no está disponible en PATH."
 }
+if ($SourcePath -ne $RepoPath) { Import-PackageToRepository }
 if ($OpenGitHubDesktop) { Open-GitHubDesktop }
 
 if (-not $Watch) {
