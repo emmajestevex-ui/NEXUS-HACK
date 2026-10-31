@@ -1064,18 +1064,19 @@ async function saveFile(event) {
     setStatus("Guardando metadata...");
     const isReplacing = Boolean(els.editingId.value);
     const { error: rpcError } = await supabaseClient.rpc("admin_upsert_remote_content_file", {
-      p_id: els.editingId.value || null,
       p_name: name,
       p_slug: slug,
       p_category: selectedCategory.id,
       p_target_bundle: targetBundle,
       p_target_path: targetPath,
-      p_description: withThumbnailMarker(els.descriptionInput.value, thumbnailPath),
       p_file_name: file.name,
       p_mime_type: packageMode ? "application/vnd.greeg.3105" : (file.type || "application/octet-stream"),
       p_byte_size: file.size,
       p_sha256: hash,
       p_storage_path: storagePath,
+      p_description: withThumbnailMarker(els.descriptionInput.value, thumbnailPath),
+      p_id: els.editingId.value || null,
+      p_force_new: !isReplacing,
       p_content_type: contentType,
       p_text_content: contentType === "text" ? textBody : null,
       p_requires_key: els.requiresKeyInput.checked,
@@ -1083,7 +1084,6 @@ async function saveFile(event) {
       p_combined_group_id: null,
       p_combined_group_name: null,
       p_combined_order: 0,
-      p_force_new: !isReplacing,
     });
 
     if (rpcError) {
@@ -1167,18 +1167,19 @@ async function saveCombinedFileGroup(selectedCategory) {
       if (uploadError) throw uploadError;
       uploadedPaths.push(storagePath);
       const { data: saved, error: rpcError } = await supabaseClient.rpc("admin_upsert_remote_content_file", {
-        p_id: item.existing?.id || null,
         p_name: name,
         p_slug: index === 0 ? slug : `${slug}-2`,
         p_category: selectedCategory.id,
         p_target_bundle: safeTargetBundle(els.targetBundleInput.value),
         p_target_path: item.path,
-        p_description: description,
         p_file_name: item.file.name,
         p_mime_type: item.file.type || "application/octet-stream",
         p_byte_size: item.file.size,
         p_sha256: hash,
         p_storage_path: storagePath,
+        p_description: description,
+        p_id: item.existing?.id || null,
+        p_force_new: !item.existing,
         p_content_type: "patch",
         p_text_content: null,
         p_requires_key: els.requiresKeyInput.checked,
@@ -1186,7 +1187,6 @@ async function saveCombinedFileGroup(selectedCategory) {
         p_combined_group_id: groupID,
         p_combined_group_name: name,
         p_combined_order: index,
-        p_force_new: !item.existing,
       });
       if (rpcError) throw rpcError;
       if (!item.existing && saved?.file?.id) savedIDs.push(saved.file.id);
@@ -1779,18 +1779,18 @@ async function normalizeStyleCategories() {
     const style = styleFromDescription(file.description, file.name);
     const wantedCategory = categoryForStyle(style, file.category || "files");
     const { error } = await supabaseClient.rpc("admin_upsert_remote_content_file", {
-      p_id: file.id,
       p_name: file.name,
       p_slug: file.slug,
       p_category: wantedCategory,
       p_target_bundle: safeTargetBundle(file.target_bundle),
       p_target_path: file.target_path || fallbackTargetPath(file),
-      p_description: withStyleMarker(file.description, style),
       p_file_name: file.file_name,
       p_mime_type: file.mime_type || "application/octet-stream",
       p_byte_size: file.byte_size,
       p_sha256: file.sha256,
       p_storage_path: file.storage_path,
+      p_description: withStyleMarker(file.description, style),
+      p_id: file.id,
       p_force_new: false,
     });
     if (error) throw error;

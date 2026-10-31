@@ -1292,6 +1292,7 @@ drop function if exists public.admin_upsert_remote_content_file(text, text, text
 drop function if exists public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid);
 drop function if exists public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean);
 drop function if exists public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text);
+drop function if exists public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text, boolean, numeric);
 drop function if exists public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text, boolean, numeric, text, text, integer);
 
 create or replace function public.admin_upsert_remote_content_file(
@@ -1804,6 +1805,7 @@ revoke all on function public.remote_content_safe_path(text, text, text) from pu
 revoke all on function public.remote_content_safe_bundle(text) from public;
 revoke all on function public.admin_list_remote_content_files() from public;
 revoke all on function public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text) from public;
+revoke all on function public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text, boolean, numeric) from public;
 revoke all on function public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text, boolean, numeric, text, text, integer) from public;
 revoke all on function public.admin_set_remote_content_active(uuid, boolean) from public;
 revoke all on function public.admin_delete_remote_content_file(uuid) from public;
