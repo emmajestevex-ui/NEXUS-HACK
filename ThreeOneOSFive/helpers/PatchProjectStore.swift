@@ -226,14 +226,14 @@ final class PatchProjectStore: ObservableObject {
         guard item.isLocked, !isBusy else { return }
         do {
             let data = try PatchProjectLibrary.readPackage(at: item.packageURL)
-            pendingUnlock = PendingUnlock(
+            let pending = PendingUnlock(
                 data: data,
                 summary: item.summary,
                 existingURL: item.packageURL,
                 origin: item.origin
             )
-            // Automatically try the configured package password.
-            unlock(password: NexusPackageAutomaticPassword.value)
+            // Protected packages must be unlocked with their own password.
+            requestPassword(pending: pending)
         } catch let error as PatchPackageError {
             present(error)
         } catch {
@@ -369,10 +369,15 @@ final class PatchProjectStore: ObservableObject {
             return nil
         }
         if summary.isPasswordProtected {
-            // .3105 contents stay encrypted; NEXUS silently unlocks them.
-            let decoded = try PatchPackageCodec.decode(
-                data, password: password ?? NexusPackageAutomaticPassword.value
-            )
+            guard let password, !password.isEmpty else {
+                return PendingUnlock(
+                    data: data,
+                    summary: summary,
+                    existingURL: existingURL,
+                    origin: origin
+                )
+            }
+            let decoded = try PatchPackageCodec.decode(data, password: password)
             try PatchKeyStore.store(decoded.contentKey, for: summary)
             do {
                 try PatchProjectLibrary.installImportedPackage(

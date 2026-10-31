@@ -510,7 +510,7 @@ enum BundledPatchSeeder {
             guard let firstFile = files.first,
                   let projectID = remoteProjectID(for: firstFile),
                   files.allSatisfy({ RemoteContentLibrary.localFileURL(for: $0, fileManager: fileManager) != nil }) else {
-                log("patch: remote discarded \(files.first?.name ?? \"unknown\") reason=missing-project-id-or-local-payload")
+                log("patch: remote discarded \(files.first?.name ?? "unknown") reason=missing-project-id-or-local-payload")
                 continue
             }
 

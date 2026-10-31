@@ -1191,7 +1191,7 @@ private struct RemoteFileMiniRow: View {
                 replacementData: replacementData
             ))
         }
-        let uniqueBundleIDs = bundleIDs.reduce(into: []) { result, bundleID in
+        let uniqueBundleIDs = bundleIDs.reduce(into: [String]()) { result, bundleID in
             if !result.contains(bundleID) { result.append(bundleID) }
         }
         let project = PatchProject(
