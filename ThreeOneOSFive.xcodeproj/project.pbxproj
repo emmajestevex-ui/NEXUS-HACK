@@ -59,6 +59,7 @@
 		3105F206 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3105F108; };
 		3105K200 /* BundledPatchSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3105K100; };
 		3105L200 /* RemoteContentSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3105L100; };
+		3105L202 /* ContentLicenseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3105L102; };
 		3105L201 /* RemoteContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3105L101; };
 		3105M200 /* FileBrowserMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3105M100; };
 		3105M201 /* PackageRepositoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3105M101; };
@@ -167,6 +168,7 @@
 		3105K101 /* BundledPatchPayloads */ = {isa = PBXFileReference; lastKnownFileType = folder; path = BundledPatchPayloads; sourceTree = "<group>"; };
 		3105L100 /* RemoteContentSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteContentSyncService.swift; sourceTree = "<group>"; };
 		3105L101 /* RemoteContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteContentView.swift; sourceTree = "<group>"; };
+		3105L102 /* ContentLicenseStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentLicenseStore.swift; sourceTree = "<group>"; };
 		3105M100 /* FileBrowserMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserMetadata.swift; sourceTree = "<group>"; };
 		3105M101 /* PackageRepositoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageRepositoryModels.swift; sourceTree = "<group>"; };
 		3105M102 /* PackageRepositoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageRepositoryStore.swift; sourceTree = "<group>"; };
@@ -288,6 +290,7 @@
 				3105G103 /* PatchWorkspaceService.swift */,
 				3105K100 /* BundledPatchSeeder.swift */,
 				3105L100 /* RemoteContentSyncService.swift */,
+				3105L102 /* ContentLicenseStore.swift */,
 				3105M101 /* PackageRepositoryModels.swift */,
 				3105M102 /* PackageRepositoryStore.swift */,
 				3105M103 /* RepositoryPresentationSupport.swift */,
@@ -449,6 +452,7 @@
 				3105K200,
 				3105L200,
 				3105L201,
+				3105L202,
 				3105M200,
 				3105M201,
 				3105M202,

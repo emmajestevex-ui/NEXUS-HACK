@@ -166,7 +166,7 @@ private struct NexusMembershipView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(isUnlocked ? "Membresía activa" : "Sin membresía")
                                         .font(.title3.weight(.black))
-                                    Text(isUnlocked ? "Acceso verificado a NEXUS HACK" : "Activa tu key para desbloquear funciones privadas")
+                                    Text(isUnlocked ? "Acceso verificado a NEXUS" : "Activa tu key para desbloquear funciones privadas")
                                         .font(.subheadline)
                                         .foregroundStyle(NexusTheme.secondaryText)
                                 }
@@ -289,7 +289,7 @@ private struct NexusSupportView: View {
             return [discord]
         }
         return [
-            NexusAppSocial(title: "Discord", subtitle: "Soporte y comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue")
+            NexusAppSocial(title: "Discord", subtitle: "Soporte y comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue")
         ]
     }
 
@@ -303,7 +303,7 @@ private struct NexusSupportView: View {
                             .foregroundStyle(.white)
                         Text("Centro de soporte")
                             .font(.largeTitle.weight(.black))
-                        Text("Ayuda, anuncios y comunidad NEXUS HACK")
+                        Text("Ayuda, anuncios y comunidad NEXUS")
                             .font(.subheadline)
                             .foregroundStyle(NexusTheme.secondaryText)
                             .multilineTextAlignment(.center)
@@ -503,7 +503,7 @@ private struct NexusCategoryTabView: View {
                             NexusRemoteArtwork(systemName: category.icon, iconURL: category.iconURL, tint: nexusCategoryColor(category.color), size: 48)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(category.title).font(.title3.weight(.black))
-                                Text(category.subtitle.isEmpty ? "Contenido remoto de NEXUS HACK" : category.subtitle)
+                                Text(category.subtitle.isEmpty ? "Contenido remoto de NEXUS" : category.subtitle)
                                     .font(.subheadline).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -736,7 +736,7 @@ private struct GreegHomeView: View {
                     .frame(width: 58, height: 58)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("NEXUS HACK")
+                        Text("NEXUS")
                             .font(.system(size: 24, weight: .black, design: .rounded))
                             .lineLimit(1)
                             .minimumScaleFactor(0.68)
@@ -925,7 +925,7 @@ private struct GreegHomeView: View {
     private var displaySocials: [NexusAppSocial] {
         if !remoteContentStore.appContent.socials.isEmpty { return remoteContentStore.appContent.socials }
         return [
-            NexusAppSocial(title: "Discord", subtitle: "Comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue"),
+            NexusAppSocial(title: "Discord", subtitle: "Comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue"),
             NexusAppSocial(title: "TikTok", subtitle: "@tumbado_sensi7", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black")
         ]
     }
@@ -1065,13 +1065,20 @@ private struct RemoteSocialRow: View {
 }
 
 private struct RemoteFileMiniRow: View {
+    @EnvironmentObject private var remoteContentStore: RemoteContentStore
     @State private var isWorking = false
     @State private var actionAlert: GreegPatchActionAlert?
+    @State private var showKeySheet = false
     let file: RemoteContentFile
     let tint: Color
 
+    private var patchFiles: [RemoteContentFile] {
+        let files = remoteContentStore.files(for: file)
+        return files.isEmpty ? [file] : files
+    }
+
     private var projectID: UUID? {
-        UUID(uuidString: file.id)
+        UUID(uuidString: file.patchGroupID)
     }
 
     private var isApplied: Bool {
@@ -1079,11 +1086,20 @@ private struct RemoteFileMiniRow: View {
         return DevicePatchService.latestReceipt(projectID: projectID) != nil
     }
 
+    private var hasFileAccess: Bool {
+        ContentLicenseStore.hasAccess(file: file)
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             RemoteFileArtwork(file: file, tint: tint)
             VStack(alignment: .leading, spacing: 2) {
-                Text(file.name).font(.headline.weight(.bold)).lineLimit(1)
+                Text(file.combinedGroupName ?? file.name).font(.headline.weight(.bold)).lineLimit(1)
+                if file.isCombinedPatch {
+                    Text("Patch combinado · \(patchFiles.count) archivos")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(tint)
+                }
                 if file.isTextContent, let textContent = file.textContent?.trimmingCharacters(in: .whitespacesAndNewlines), !textContent.isEmpty {
                     Text(textContent)
                         .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
@@ -1094,18 +1110,26 @@ private struct RemoteFileMiniRow: View {
             }
             Spacer()
             if file.isTextContent {
-                Image(systemName: "doc.text.fill")
-                    .foregroundStyle(tint)
+                Button {
+                    if hasFileAccess { return }
+                    showKeySheet = true
+                } label: {
+                    Image(systemName: hasFileAccess ? "doc.text.fill" : "lock.fill")
+                        .foregroundStyle(tint)
+                }
+                .buttonStyle(.plain)
             } else {
-                Button(action: togglePatch) {
+                Button(action: { hasFileAccess ? togglePatch() : (showKeySheet = true) }) {
                     HStack(spacing: 5) {
                         if isWorking {
                             ProgressView()
                                 .tint(.white)
                         } else {
-                            Image(systemName: isApplied ? "arrow.uturn.backward.circle.fill" : "checkmark.circle.fill")
+                            Image(systemName: hasFileAccess
+                                  ? (isApplied ? "arrow.uturn.backward.circle.fill" : "checkmark.circle.fill")
+                                  : "lock.fill")
                         }
-                        Text(isApplied ? "Original" : "Aplicar")
+                        Text(hasFileAccess ? (isApplied ? "Original" : "Aplicar") : "Desbloquear")
                     }
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.white)
@@ -1120,6 +1144,11 @@ private struct RemoteFileMiniRow: View {
             }
         }
         .padding(.vertical, 5)
+        .sheet(isPresented: $showKeySheet) {
+            ContentKeyUnlockView(file: file) {
+                remoteContentStore.syncIfPossible(force: true)
+            }
+        }
         .alert(item: $actionAlert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -1142,28 +1171,37 @@ private struct RemoteFileMiniRow: View {
             actionAlert = GreegPatchActionAlert(title: "No se pudo aplicar", message: "Este archivo remoto no tiene un identificador válido.")
             return
         }
-        guard let targetPath = file.targetPath?.trimmingCharacters(in: .whitespacesAndNewlines), !targetPath.isEmpty else {
-            actionAlert = GreegPatchActionAlert(title: "Ruta faltante", message: "Este patch no tiene una ruta de destino configurada.")
-            return
+        var rules: [PatchRule] = []
+        var bundleIDs: [String] = []
+        for patchFile in patchFiles.sorted(by: { $0.combinedOrder < $1.combinedOrder }) {
+            guard let targetPath = patchFile.targetPath?.trimmingCharacters(in: .whitespacesAndNewlines), !targetPath.isEmpty else {
+                actionAlert = GreegPatchActionAlert(title: "Ruta faltante", message: "Uno de los archivos del patch combinado no tiene una ruta configurada.")
+                return
+            }
+            guard let localURL = RemoteContentLibrary.localFileURL(for: patchFile),
+                  let replacementData = try? Data(contentsOf: localURL) else {
+                actionAlert = GreegPatchActionAlert(title: "Sincroniza primero", message: "Pulsa Sincronizar para descargar todos los archivos de este patch.")
+                return
+            }
+            bundleIDs.append(patchFile.targetBundleID)
+            rules.append(PatchRule(
+                bundleID: patchFile.targetBundleID,
+                relativePath: targetPath,
+                replacementFilename: patchFile.fileName,
+                replacementData: replacementData
+            ))
         }
-        guard let localURL = RemoteContentLibrary.localFileURL(for: file),
-              let replacementData = try? Data(contentsOf: localURL) else {
-            actionAlert = GreegPatchActionAlert(title: "Sincroniza primero", message: "Pulsa Sincronizar para descargar este patch antes de aplicarlo.")
-            return
+        let uniqueBundleIDs = bundleIDs.reduce(into: []) { result, bundleID in
+            if !result.contains(bundleID) { result.append(bundleID) }
         }
-
         let project = PatchProject(
             id: projectID,
-            name: file.name,
+            name: file.combinedGroupName ?? file.name,
             author: "NEXUS HACK [REMOTE]",
-            bundleIdentifiers: [file.targetBundleID],
-            rules: [PatchRule(
-                bundleID: file.targetBundleID,
-                relativePath: targetPath,
-                replacementFilename: file.fileName,
-                replacementData: replacementData
-            )]
+            bundleIdentifiers: uniqueBundleIDs,
+            rules: rules
         )
+        let ruleCount = rules.count
 
         isWorking = true
         Task.detached(priority: .userInitiated) {
@@ -1173,7 +1211,8 @@ private struct RemoteFileMiniRow: View {
                     isWorking = false
                     NexusHaptics.notification(.success)
                     NexusAudioPlayer.shared.play(named: "nexus_apply")
-                    actionAlert = GreegPatchActionAlert(title: "Patch aplicado", message: "El patch está activo. Pulsa Original para restaurar el archivo anterior.")
+                    let countText = ruleCount == 1 ? "El archivo" : "Los \(ruleCount) archivos"
+                    actionAlert = GreegPatchActionAlert(title: "Patch aplicado", message: "\(countText) están activos. Pulsa Original para restaurarlos juntos.")
                 }
             } catch let error as PatchPackageError {
                 await MainActor.run {
@@ -1192,6 +1231,7 @@ private struct RemoteFileMiniRow: View {
     private func restore() {
         guard let projectID,
               let receipt = DevicePatchService.latestReceipt(projectID: projectID) else { return }
+        let patchCount = patchFiles.count
         isWorking = true
         Task.detached(priority: .userInitiated) {
             do {
@@ -1200,7 +1240,8 @@ private struct RemoteFileMiniRow: View {
                     isWorking = false
                     NexusHaptics.notification(.success)
                     NexusAudioPlayer.shared.play(named: "nexus_original")
-                    actionAlert = GreegPatchActionAlert(title: "Original restaurado", message: "El archivo volvió a su estado original.")
+                    let countText = patchCount == 1 ? "El archivo volvió" : "Los \(patchCount) archivos volvieron"
+                    actionAlert = GreegPatchActionAlert(title: "Original restaurado", message: "\(countText) a su estado original.")
                 }
             } catch let error as PatchPackageError {
                 await MainActor.run {
@@ -1213,6 +1254,70 @@ private struct RemoteFileMiniRow: View {
                     actionAlert = GreegPatchActionAlert(title: "No se pudo restaurar", message: error.localizedDescription)
                 }
             }
+        }
+    }
+}
+
+private struct ContentKeyUnlockView: View {
+    @Environment(\.dismiss) private var dismiss
+    let file: RemoteContentFile
+    let onUnlocked: () -> Void
+    @State private var key = ""
+    @State private var message = ""
+    @State private var isLoading = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(file.name).font(.headline)
+                    Text("Este contenido está protegido. Precio de referencia: $\(file.priceUSD, specifier: "%.2f") USD.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Section("Key de acceso") {
+                    SecureField("NEXUS-XXXX-XXXX", text: $key)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                    if !message.isEmpty {
+                        Text(message).font(.footnote).foregroundStyle(.red)
+                    }
+                    Button {
+                        unlock()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isLoading { ProgressView() } else { Text("Desbloquear patch") }
+                            Spacer()
+                        }
+                    }
+                    .disabled(isLoading || key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .navigationTitle("Contenido protegido")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func unlock() {
+        isLoading = true
+        message = ""
+        Task {
+            do {
+                _ = try await ContentLicenseStore.activate(key: key, file: file)
+                await MainActor.run {
+                    onUnlocked()
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run { message = error.localizedDescription }
+            }
+            await MainActor.run { isLoading = false }
         }
     }
 }
@@ -1461,7 +1566,7 @@ private struct GreegPatchLibraryView: View {
             HStack(spacing: 12) {
                 AppLogo(size: 40)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Centro NEXUS HACK")
+                    Text("Centro NEXUS")
                         .font(.headline.weight(.black))
                     Text("\(visibleItems.count) archivos privados")
                         .font(.caption.weight(.semibold))
@@ -1766,7 +1871,7 @@ private struct GreegPatchRow: View {
                         )
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(project?.name ?? "Archivo NEXUS HACK")
+                            Text(project?.name ?? "Archivo NEXUS")
                                 .font(.headline.weight(.black))
                                 .foregroundStyle(.white)
                                 .lineLimit(2)
@@ -1801,7 +1906,7 @@ private struct GreegPatchRow: View {
     }
 
     private var iconName: String {
-        let name = (project?.name ?? "Archivo NEXUS HACK").lowercased()
+        let name = (project?.name ?? "Archivo NEXUS").lowercased()
         if name.contains("cuello") {
             return "link.circle.fill"
         }
@@ -1940,7 +2045,7 @@ private struct GreegPatchDetailView: View {
                 HStack(spacing: 14) {
                     AppRowIcon(systemName: kind.iconName, tint: kind.tint, symbolSize: 16, frameSize: 40)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(project?.name ?? "Archivo NEXUS HACK")
+                        Text(project?.name ?? "Archivo NEXUS")
                             .font(.system(size: 24, weight: .black, design: .rounded))
                             .lineLimit(2)
                             .minimumScaleFactor(0.75)

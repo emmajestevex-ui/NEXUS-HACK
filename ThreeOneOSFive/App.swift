@@ -392,7 +392,7 @@ private struct NexusLaunchExperience: View {
                 .opacity(reveal ? 1 : 0)
 
                 VStack(spacing: 6) {
-                    Text("NEXUS HACK")
+                    Text("NEXUS")
                         .font(.system(size: 31, weight: .black, design: .rounded))
                         .foregroundStyle(LinearGradient(colors: [.white, NexusTheme.blueBright], startPoint: .leading, endPoint: .trailing))
                     Text("Preparando tu centro privado")
@@ -494,7 +494,7 @@ struct GreegLicenseView: View {
                     .nexusEntrance(index: 0)
 
                     VStack(spacing: 7) {
-                        Text("NEXUS HACK")
+                        Text("NEXUS")
                             .font(.system(size: 31, weight: .black, design: .rounded))
                             .foregroundStyle(
                                 LinearGradient(colors: [.white, NexusTheme.blueBright], startPoint: .leading, endPoint: .trailing)
@@ -549,7 +549,7 @@ struct GreegLicenseView: View {
                         .foregroundStyle(NexusTheme.tertiaryText)
                         .nexusEntrance(index: 3)
 
-                    Text("NEXUS HACK · ACCESO PRIVADO")
+                    Text("NEXUS · ACCESO PRIVADO")
                         .font(.caption2.weight(.semibold))
                         .tracking(2)
                         .foregroundStyle(NexusTheme.tertiaryText)
