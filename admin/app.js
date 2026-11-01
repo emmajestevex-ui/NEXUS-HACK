@@ -520,12 +520,23 @@ async function loadSettings() {
   els.settingsStatusText.textContent = "Cargando diseno remoto...";
   const { data, error } = await supabaseClient.rpc("admin_get_app_settings");
   if (error) {
-    els.settingsStatusText.textContent = adminErrorMessage(error);
+    state.appContent = structuredClone(DEFAULT_APP_CONTENT);
+    els.settingsInput.value = JSON.stringify(state.appContent, null, 2);
+    renderCategoryEditor();
+    els.settingsStatusText.textContent = `${adminErrorMessage(error)} Mostrando categorias predeterminadas hasta corregir la conexion.`;
     return;
   }
-  state.appContent = data || structuredClone(DEFAULT_APP_CONTENT);
+  state.appContent = data && typeof data === "object" && !Array.isArray(data)
+    ? data
+    : structuredClone(DEFAULT_APP_CONTENT);
+  if (!Array.isArray(state.appContent.categories) || state.appContent.categories.length === 0) {
+    state.appContent.categories = structuredClone(DEFAULT_APP_CONTENT.categories);
+  }
   if (!Array.isArray(state.appContent.tabs) || state.appContent.tabs.length === 0) {
     state.appContent.tabs = structuredClone(DEFAULT_APP_CONTENT.tabs);
+  }
+  if (!Array.isArray(state.appContent.socials)) {
+    state.appContent.socials = structuredClone(DEFAULT_APP_CONTENT.socials);
   }
   els.settingsInput.value = JSON.stringify(state.appContent, null, 2);
   renderCategoryEditor();

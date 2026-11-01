@@ -192,6 +192,25 @@ values (
 )
 on conflict (id) do nothing;
 
+-- Keep a usable first-run design when an older database has an empty category list.
+-- Existing custom categories are preserved.
+update public.nexus_app_settings
+set content = jsonb_set(
+    content,
+    '{categories}',
+    jsonb_build_array(
+        jsonb_build_object('id', 'aim', 'title', 'AIM', 'subtitle', 'Parches principales', 'icon', 'scope', 'color', 'blue', 'content_type', 'patch', 'parent_id', null, 'sort_order', 0),
+        jsonb_build_object('id', 'tutoriales', 'title', 'Tutoriales', 'subtitle', 'Guias y anuncios', 'icon', 'book.fill', 'color', 'gray', 'content_type', 'text', 'parent_id', null, 'sort_order', 1)
+    )::jsonb,
+    true
+)
+where id = 'main'
+  and (
+      content->'categories' is null
+      or jsonb_typeof(content->'categories') <> 'array'
+      or jsonb_array_length(content->'categories') = 0
+  );
+
 alter table public.nexus_app_settings enable row level security;
 revoke all on public.nexus_app_settings from anon, authenticated;
 

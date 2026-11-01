@@ -262,6 +262,28 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
         case iconURL = "icon_url"
     }
 
+    init(
+        id: String,
+        title: String,
+        subtitle: String,
+        icon: String,
+        iconURL: String? = nil,
+        color: String,
+        contentType: String = "patch",
+        parentID: String? = nil,
+        sortOrder: Int = 0
+    ) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
+        self.iconURL = iconURL
+        self.color = color
+        self.contentType = contentType
+        self.parentID = parentID
+        self.sortOrder = sortOrder
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
@@ -371,7 +393,11 @@ struct NexusAppContent: Codable, Equatable {
         NexusAppTab(id: "membership", title: "Membresía", icon: "person.crop.circle.fill", kind: "membership", sortOrder: 4),
         NexusAppTab(id: "support", title: "Soporte", icon: "headphones.circle.fill", kind: "support", sortOrder: 5)
     ]
-    static let empty = NexusAppContent(title: "NEXUS", subtitle: "Control privado", announcement: nil, categories: [], socials: [], tabs: defaultTabs)
+    static let defaultCategories = [
+        NexusAppCategory(id: "aim", title: "AIM", subtitle: "Parches principales", icon: "scope", color: "blue", sortOrder: 0),
+        NexusAppCategory(id: "tutoriales", title: "Tutoriales", subtitle: "Guias y anuncios", icon: "book.fill", color: "gray", contentType: "text", sortOrder: 1)
+    ]
+    static let empty = NexusAppContent(title: "NEXUS", subtitle: "Control privado", announcement: nil, categories: defaultCategories, socials: [], tabs: defaultTabs)
 
     init(title: String, subtitle: String, announcement: NexusAppAnnouncement?, categories: [NexusAppCategory], socials: [NexusAppSocial], tabs: [NexusAppTab] = defaultTabs) {
         self.title = title; self.subtitle = subtitle; self.announcement = announcement; self.categories = categories; self.socials = socials; self.tabs = tabs
@@ -382,7 +408,8 @@ struct NexusAppContent: Codable, Equatable {
         title = (try? c.decode(String.self, forKey: .title)) ?? "NEXUS"
         subtitle = (try? c.decode(String.self, forKey: .subtitle)) ?? "Control privado"
         announcement = try? c.decodeIfPresent(NexusAppAnnouncement.self, forKey: .announcement)
-        categories = (try? c.decode([NexusAppCategory].self, forKey: .categories)) ?? []
+        let decodedCategories = (try? c.decode([NexusAppCategory].self, forKey: .categories)) ?? []
+        categories = decodedCategories.isEmpty ? Self.defaultCategories : decodedCategories
         socials = (try? c.decode([NexusAppSocial].self, forKey: .socials)) ?? []
         tabs = (try? c.decode([NexusAppTab].self, forKey: .tabs)) ?? NexusAppContent.defaultTabs
     }
