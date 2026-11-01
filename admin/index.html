@@ -53,6 +53,7 @@
         <button type="button" class="adminNavItem" data-admin-target="keys" aria-pressed="false"><span class="adminNavNumber">03</span><span><strong>Keys de categorías</strong><small>Solo categorías protegidas</small></span></button>
         <button type="button" class="adminNavItem" data-admin-target="app-keys" aria-pressed="false"><span class="adminNavNumber">04</span><span><strong>Keys de la app</strong><small>Licencias normales de NEXUS</small></span></button>
         <button type="button" class="adminNavItem" data-admin-target="packages" aria-pressed="false"><span class="adminNavNumber">05</span><span><strong>Paquetes .3105</strong><small>Importar y asignar paquetes completos</small></span></button>
+        <button type="button" class="adminNavItem" data-admin-target="combined" aria-pressed="false"><span class="adminNavNumber">06</span><span><strong>Patches combinados</strong><small>Dos archivos y dos rutas</small></span></button>
       </nav>
       <section id="adminPanel" class="grid hidden">
         <aside class="panel" data-admin-view="patches">
@@ -131,6 +132,18 @@
               </span>
               <span class="fieldHint">Actívalo para subir un patch que ya fue creado/exportado desde 3105. El iPhone lo importará completo, sin convertirlo.</span>
             </label>
+            <label id="combinedPatchLabel" class="checkLabel">
+              <input id="combinedPatchInput" type="checkbox" />
+              Patch combinado (2 archivos / 2 rutas)
+              <span class="fieldHint">La app aplicará y restaurará los dos archivos como una sola acción.</span>
+            </label>
+            <div id="combinedPatchFields" class="combinedPatchFields hidden">
+              <label>Archivo 1<input id="combinedFileOneInput" type="file" /></label>
+              <label>Ruta que reemplaza el archivo 1<input id="combinedPathOneInput" type="text" placeholder="carpeta/archivo.bundle" /></label>
+              <label>Archivo 2<input id="combinedFileTwoInput" type="file" /></label>
+              <label>Ruta que reemplaza el archivo 2<input id="combinedPathTwoInput" type="text" placeholder="carpeta/otro-archivo.bundle" /></label>
+              <span class="fieldHint">Los dos archivos se sincronizan juntos y aparecen como una sola categoría.</span>
+            </div>
             <label>
               Imagen pequena del patch (opcional)
               <input id="thumbnailInput" type="file" accept="image/*" />
@@ -377,6 +390,33 @@
           <div class="packageInfo">Las rutas originales y archivos de reemplazo están dentro del paquete. La IPA mostrará <strong>Importar .3105</strong> y el paquete se instalará en la biblioteca. <strong>No</strong> se copia directamente sobre assetindexer.</div>
           <div class="toolbar"><h3>Paquetes existentes</h3></div>
           <div id="packageList" class="fileList"></div>
+        </section>
+        <section class="panel fullWidth" data-admin-view="combined">
+          <div class="panelHeader">
+            <div>
+              <h2>Crear patch combinado</h2>
+              <p class="muted">Sube dos archivos con sus dos rutas. En el iPhone aparecerá como un solo patch y Aplicar / Original actuará sobre ambos.</p>
+            </div>
+            <button type="button" id="combinedRefreshButton" class="ghost">Actualizar categorías</button>
+          </div>
+          <form id="combinedFileForm" class="form combinedForm">
+            <div class="combinedFormGrid">
+              <label>Nombre visible<input id="combinedNameInput" type="text" maxlength="80" placeholder="Ej. Pecho + Antena" required /></label>
+              <label>Slug<input id="combinedSlugInput" type="text" maxlength="80" placeholder="pecho-antena" required /></label>
+              <label>Categoría<select id="combinedCategoryInput" required><option value="">Cargando categorías...</option></select><span class="fieldHint">Elige una categoría tipo patch; los contenedores no reciben archivos.</span></label>
+              <label>App destino<select id="combinedTargetBundleInput"><option value="com.dts.freefireth">Free Fire TH - com.dts.freefireth</option><option value="com.dts.freefiremax">Free Fire Max - com.dts.freefiremax</option></select></label>
+              <label>Archivo 1<input id="combinedFormFileOneInput" type="file" required /></label>
+              <label>Ruta del archivo 1<input id="combinedFormPathOneInput" type="text" maxlength="180" placeholder="Documents/.../archivo-1" required /></label>
+              <label>Archivo 2<input id="combinedFormFileTwoInput" type="file" required /></label>
+              <label>Ruta del archivo 2<input id="combinedFormPathTwoInput" type="text" maxlength="180" placeholder="Documents/.../archivo-2" required /></label>
+              <label>Descripción<textarea id="combinedDescriptionInput" rows="3" placeholder="Nota opcional para el usuario"></textarea></label>
+              <label>Imagen pequeña (opcional)<input id="combinedThumbnailInput" type="file" accept="image/*" /><span class="fieldHint">Acepta capturas e imágenes; se ajusta automáticamente.</span></label>
+              <label>Precio de referencia (USD)<input id="combinedPriceUSDInput" type="number" min="0.01" step="0.01" value="15.00" /></label>
+              <label class="checkLabel"><input id="combinedSecureUploadInput" type="checkbox" checked />Cifrar los dos archivos (AES-256-GCM)<span class="fieldHint">Usa la misma protección segura de los patches normales.</span></label>
+            </div>
+            <button id="combinedSaveButton" class="primary" type="submit">Guardar patch combinado</button>
+          </form>
+          <p id="combinedStatusText" class="notice" role="status">Completa los dos archivos y sus rutas antes de guardar.</p>
         </section>
       </section>
     </main>

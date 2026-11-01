@@ -1237,7 +1237,12 @@ private struct RemoteFileMiniRow: View {
     let tint: Color
 
     private var projectID: UUID? {
-        UUID(uuidString: file.id)
+        UUID(uuidString: file.patchGroupID)
+    }
+
+    private var patchFiles: [RemoteContentFile] {
+        let files = remoteContentStore.files(for: file)
+        return files.isEmpty ? [file] : files
     }
 
     private var activeProjectID: UUID? {
@@ -1271,10 +1276,17 @@ private struct RemoteFileMiniRow: View {
             RemoteFileArtwork(file: file, tint: tint)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(file.name)
+                Text(file.combinedGroupName ?? file.name)
                     .font(.headline.weight(.bold))
                     .lineLimit(file.isTextContent ? 2 : 1)
                     .multilineTextAlignment(.leading)
+
+                if file.isCombinedPatch {
+                    Text("Patch combinado · \(patchFiles.count) archivos")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(tint)
+                        .lineLimit(1)
+                }
 
                 Text(file.isTextContent
                      ? readableText
@@ -1448,28 +1460,42 @@ private struct RemoteFileMiniRow: View {
             actionAlert = GreegPatchActionAlert(title: "No se pudo aplicar", message: "Este archivo remoto no tiene un identificador válido.")
             return
         }
-        guard let targetPath = file.targetPath?.trimmingCharacters(in: .whitespacesAndNewlines), !targetPath.isEmpty else {
-            actionAlert = GreegPatchActionAlert(title: "Ruta faltante", message: "Este patch no tiene una ruta de destino configurada.")
-            return
-        }
-        guard let localURL = RemoteContentLibrary.localFileURL(for: file),
-              let replacementData = try? Data(contentsOf: localURL) else {
-            actionAlert = GreegPatchActionAlert(title: "Sincroniza primero", message: "Pulsa Sincronizar para descargar este patch antes de aplicarlo.")
-            return
+        var rules: [PatchRule] = []
+        var bundleIDs: [String] = []
+        for patchFile in patchFiles.sorted(by: {
+            $0.combinedOrder == $1.combinedOrder
+                ? $0.fileName.localizedCaseInsensitiveCompare($1.fileName) == .orderedAscending
+                : $0.combinedOrder < $1.combinedOrder
+        }) {
+            guard let targetPath = patchFile.targetPath?.trimmingCharacters(in: .whitespacesAndNewlines), !targetPath.isEmpty else {
+                actionAlert = GreegPatchActionAlert(title: "Ruta faltante", message: "Uno de los archivos del patch no tiene una ruta configurada.")
+                return
+            }
+            guard let localURL = RemoteContentLibrary.localFileURL(for: patchFile),
+                  let replacementData = try? Data(contentsOf: localURL) else {
+                actionAlert = GreegPatchActionAlert(title: "Sincroniza primero", message: "Pulsa Sincronizar para descargar todos los archivos de este patch.")
+                return
+            }
+            bundleIDs.append(patchFile.targetBundleID)
+            rules.append(PatchRule(
+                bundleID: patchFile.targetBundleID,
+                relativePath: targetPath,
+                replacementFilename: patchFile.fileName,
+                replacementData: replacementData
+            ))
         }
 
+        let uniqueBundleIDs = bundleIDs.reduce(into: [String]()) { result, bundleID in
+            if !result.contains(bundleID) { result.append(bundleID) }
+        }
         let project = PatchProject(
             id: projectID,
-            name: file.name,
+            name: file.combinedGroupName ?? file.name,
             author: "NEXUS [REMOTE]",
-            bundleIdentifiers: [file.targetBundleID],
-            rules: [PatchRule(
-                bundleID: file.targetBundleID,
-                relativePath: targetPath,
-                replacementFilename: file.fileName,
-                replacementData: replacementData
-            )]
+            bundleIdentifiers: uniqueBundleIDs,
+            rules: rules
         )
+        let ruleCount = rules.count
 
         isWorking = true
         Task.detached(priority: .userInitiated) {
@@ -1479,7 +1505,7 @@ private struct RemoteFileMiniRow: View {
                     isWorking = false
                     NexusHaptics.notification(.success)
                     NexusAudioPlayer.shared.play(named: "nexus_apply")
-                    actionAlert = GreegPatchActionAlert(title: "Patch aplicado", message: "El patch está activo. Pulsa Original para restaurar el archivo anterior.")
+                    actionAlert = GreegPatchActionAlert(title: "Patch aplicado", message: "Los \(ruleCount) archivos están activos. Pulsa Original para restaurarlos.")
                 }
             } catch let error as PatchPackageError {
                 await MainActor.run {
@@ -1506,7 +1532,7 @@ private struct RemoteFileMiniRow: View {
                     isWorking = false
                     NexusHaptics.notification(.success)
                     NexusAudioPlayer.shared.play(named: "nexus_original")
-                    actionAlert = GreegPatchActionAlert(title: "Original restaurado", message: "El archivo volvió a su estado original.")
+                    actionAlert = GreegPatchActionAlert(title: "Original restaurado", message: "Los archivos volvieron a su estado original.")
                 }
             } catch let error as PatchPackageError {
                 await MainActor.run {
