@@ -1,0 +1,45 @@
+NEXUS V2 — IDENTIDAD, INTRO, KEYS POR CATEGORÍA, CONTRASEÑA DE CATEGORÍA
+
+Origen: repositorio NEXUS-HACK. El paquete NO es una IPA, y NO ejecuta SQL automáticamente.
+
+1. BACKUP: conserva copia del repo original y la base de datos Supabase.
+2. Si los usuarios ya usan claves antiguas por archivo, las keys antiguas con capability 'content:UUID' NO servirán para activar categorías. Genera nuevas keys por categoría.
+3. En el Supabase de NEXUS (no otro), ejecuta primero sql/NEXUS_CATEGORIAS_Y_PASSWORD.sql desde SQL Editor. Lee y verifica el proyecto antes de RUN.
+4. Abre NEXUS-HACK en GitHub Desktop para que quede clonado en el PC. Extrae este ZIP.
+5. Doble clic 1-ACTUALIZAR-NEXUS.cmd (requiere Python 3). Si no encuentra tu carpeta, en CMD:
+   py -3 actualizar_nexus.py --repo "C:\RUTA\A\NEXUS-HACK"
+6. Los cambios se copian SOLO a NEXUS-HACK. Copia previa en %LOCALAPPDATA%\NexusBackups.
+7. En GitHub Desktop comprueba que dice NEXUS-HACK y no otro repo, revisa Changes, luego Commit y Push origin.
+8. En GitHub Actions abre Build NEXUS HACK IPA. Solo descarga la IPA si compiló correctamente, y fírmala con un certificado autorizado.
+9. En el panel administrativo de NEXUS, en Diseño/Categorías, crea categorías y pon una contraseña FUERTE diferente a cada categoría con patches. Sin contraseña, la app V2 bloqueará esa categoría.
+10. En Keys, selecciona la CATEGORÍA (no un archivo), crea keys nuevas y prueba con usuario autorizado.
+
+QUÉ HACE:
+- App visible NEXUS, icono lobo azul provisto, audio voz femenina provista.
+- Intro HTML proporcionada, mostrada por WKWebView sin conexión y sin botón Repetir; tras aprox. 4.35 s continúa.
+- Rayos sutiles animados al fondo, respetando Reducir movimiento.
+- Keys por categoría; una key válida desbloquea todos los archivos de ESA categoría durante esa ejecución.
+- Contraseña por categoría configurada en Supabase: se guarda hash, no texto plano.
+- Bloqueo por defecto de categorías sin contraseña configurada.
+- La app no almacena la aprobación de categoría permanentemente entre reinicios.
+
+LÍMITES DE SEGURIDAD REALES:
+- Esto agrega autorización para descargar/APLICAR mediante NEXUS, NO cifra los archivos remotos.
+- La policy existente permite GET de objetos content/ a anon; cualquiera con la ruta puede obtener los bytes.
+- Si otra app ya tiene/copió el patch DESCIFRADO, un PIN, key o pantalla de login en NEXUS no impide que lo use.
+- Para impedir la reutilización de paquetes originales hay que cifrarlos (por ejemplo AES-GCM), guardar únicamente archivos cifrados y entregar la clave de descifrado después de autorización; aun así un atacante con control de dispositivo puede extraer datos tras descifrado.
+- No prometemos protección irrompible, no modificamos permisos del sistema ni bypass de otras apps.
+- El repositorio conserva su motor de patches original. No se ha probado con Xcode ni en iPhone aquí.
+
+IMPORTANTE SOBRE LA CAPTURA "NO PASSWORD" EN .3105:
+- Esa etiqueta pertenece a paquetes LOCALES .3105, un formato distinto de los patches REMOTOS del panel.
+- Este paquete cambia el permiso del contenido REMOTO para exigir key + contraseña por categoría; NO reescribe ni re-cifra automáticamente los paquetes .3105 existentes.
+- El proyecto original ya contiene PatchPackageCodec con AES-GCM y contraseña para paquetes .3105. Para quitar "No password" hay que crear/exportar nuevamente cada paquete con contraseña fuerte y retirar las copias antiguas sin cifrar.
+- Ni claves de categorías ni cambios en la interfaz pueden impedir a otra app reutilizar bytes ya aplicados o extraídos.
+
+PRUEBAS REALIZADAS ANTES DE ENTREGAR:
+- Sintaxis del actualizador Python validada y ensayo de transformaciones sobre proyecto simulado.
+- Verificados anclajes de los archivos del repositorio GitHub NEXUS-HACK disponibles al 22-oct-2026.
+- Verificados estructura básica de SQL, MP3 reproducible e imágenes 1024x1024.
+- No se ha probado compilación Xcode: esta máquina no dispone de macOS/Xcode.
+- Instala el SQL antes de probar desbloqueos por categoría; si sale RPC no encontrada revisa el SQL y los permisos en Supabase.

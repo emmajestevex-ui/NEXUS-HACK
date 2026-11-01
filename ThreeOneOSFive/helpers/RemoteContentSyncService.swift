@@ -19,9 +19,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
     let byteSize: Int64
     let sha256: String
     let storagePath: String
-    let combinedGroupID: String?
-    let combinedGroupName: String?
-    let combinedOrder: Int
+    let requiresKey: Bool
+    let priceUSD: Double
     let isActive: Bool
     let deletedAt: String?
     let publishedAt: String?
@@ -42,9 +41,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         case byteSize = "byte_size"
         case sha256
         case storagePath = "storage_path"
-        case combinedGroupID = "combined_group_id"
-        case combinedGroupName = "combined_group_name"
-        case combinedOrder = "combined_order"
+        case requiresKey = "requires_key"
+        case priceUSD = "price_usd"
         case isActive = "is_active"
         case deletedAt = "deleted_at"
         case publishedAt = "published_at"
@@ -70,9 +68,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         byteSize = (try? container.decode(Int64.self, forKey: .byteSize)) ?? 0
         sha256 = ((try? container.decode(String.self, forKey: .sha256)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         storagePath = ((try? container.decode(String.self, forKey: .storagePath)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        combinedGroupID = try? container.decodeIfPresent(String.self, forKey: .combinedGroupID)
-        combinedGroupName = try? container.decodeIfPresent(String.self, forKey: .combinedGroupName)
-        combinedOrder = (try? container.decode(Int.self, forKey: .combinedOrder)) ?? 0
+        requiresKey = (try? container.decode(Bool.self, forKey: .requiresKey)) ?? (contentType != "text")
+        priceUSD = (try? container.decode(Double.self, forKey: .priceUSD)) ?? 15.0
         isActive = (try? container.decode(Bool.self, forKey: .isActive)) ?? true
         deletedAt = try? container.decodeIfPresent(String.self, forKey: .deletedAt)
         publishedAt = try? container.decodeIfPresent(String.self, forKey: .publishedAt)
@@ -94,9 +91,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         byteSize: Int64,
         sha256: String,
         storagePath: String,
-        combinedGroupID: String? = nil,
-        combinedGroupName: String? = nil,
-        combinedOrder: Int = 0,
+        requiresKey: Bool = true,
+        priceUSD: Double = 15.0,
         isActive: Bool = true,
         deletedAt: String? = nil,
         publishedAt: String?
@@ -116,9 +112,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         self.byteSize = byteSize
         self.sha256 = sha256.lowercased()
         self.storagePath = storagePath
-        self.combinedGroupID = combinedGroupID
-        self.combinedGroupName = combinedGroupName
-        self.combinedOrder = combinedOrder
+        self.requiresKey = requiresKey
+        self.priceUSD = priceUSD
         self.isActive = isActive
         self.deletedAt = deletedAt
         self.publishedAt = publishedAt
@@ -141,9 +136,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         try container.encode(byteSize, forKey: .byteSize)
         try container.encode(sha256, forKey: .sha256)
         try container.encode(storagePath, forKey: .storagePath)
-        try container.encodeIfPresent(combinedGroupID, forKey: .combinedGroupID)
-        try container.encodeIfPresent(combinedGroupName, forKey: .combinedGroupName)
-        try container.encode(combinedOrder, forKey: .combinedOrder)
+        try container.encode(requiresKey, forKey: .requiresKey)
+        try container.encode(priceUSD, forKey: .priceUSD)
         try container.encode(isActive, forKey: .isActive)
         try container.encodeIfPresent(deletedAt, forKey: .deletedAt)
         try container.encodeIfPresent(publishedAt, forKey: .publishedAt)
@@ -186,13 +180,8 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         contentType == "text"
     }
 
-    var patchGroupID: String {
-        let value = combinedGroupID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return value.isEmpty ? id : value
-    }
-
-    var isCombinedPatch: Bool {
-        !((combinedGroupID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    var accessCapability: String {
+        "content:\(id.lowercased())"
     }
 
     private static func safeComponent(_ value: String, fallback: String) -> String {
@@ -236,9 +225,10 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
     let contentType: String
     let parentID: String?
     let sortOrder: Int
+    let requiresKey: Bool
 
     enum CodingKeys: String, CodingKey {
-        case id, title, subtitle, icon, color
+        case id, title, subtitle, icon, color, requiresKey = "requires_key"
         case legacyType = "type"
         case contentType = "content_type"
         case parentID = "parent_id"
@@ -258,6 +248,7 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
         contentType = rawContentType == "text" ? "text" : (rawContentType == "container" ? "container" : "patch")
         parentID = try? c.decodeIfPresent(String.self, forKey: .parentID)
         sortOrder = (try? c.decode(Int.self, forKey: .sortOrder)) ?? 0
+        requiresKey = (try? c.decode(Bool.self, forKey: .requiresKey)) ?? (contentType == "patch")
     }
 
     func encode(to encoder: Encoder) throws {
@@ -271,6 +262,7 @@ struct NexusAppCategory: Codable, Identifiable, Equatable {
         try c.encode(contentType, forKey: .contentType)
         try c.encodeIfPresent(parentID, forKey: .parentID)
         try c.encode(sortOrder, forKey: .sortOrder)
+        try c.encode(requiresKey, forKey: .requiresKey)
     }
 
     var isTextCategory: Bool {
@@ -355,7 +347,7 @@ struct NexusAppContent: Codable, Equatable {
         NexusAppTab(id: "membership", title: "Membresía", icon: "person.crop.circle.fill", kind: "membership", sortOrder: 4),
         NexusAppTab(id: "support", title: "Soporte", icon: "headphones.circle.fill", kind: "support", sortOrder: 5)
     ]
-    static let empty = NexusAppContent(title: "NEXUS HACK", subtitle: "Control privado", announcement: nil, categories: [], socials: [], tabs: defaultTabs)
+    static let empty = NexusAppContent(title: "NEXUS", subtitle: "Control privado", announcement: nil, categories: [], socials: [], tabs: defaultTabs)
 
     init(title: String, subtitle: String, announcement: NexusAppAnnouncement?, categories: [NexusAppCategory], socials: [NexusAppSocial], tabs: [NexusAppTab] = defaultTabs) {
         self.title = title; self.subtitle = subtitle; self.announcement = announcement; self.categories = categories; self.socials = socials; self.tabs = tabs
@@ -363,7 +355,7 @@ struct NexusAppContent: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        title = (try? c.decode(String.self, forKey: .title)) ?? "NEXUS HACK"
+        title = (try? c.decode(String.self, forKey: .title)) ?? "NEXUS"
         subtitle = (try? c.decode(String.self, forKey: .subtitle)) ?? "Control privado"
         announcement = try? c.decodeIfPresent(NexusAppAnnouncement.self, forKey: .announcement)
         categories = (try? c.decode([NexusAppCategory].self, forKey: .categories)) ?? []
@@ -372,6 +364,15 @@ struct NexusAppContent: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey { case title, subtitle, announcement, categories, socials, tabs }
+
+    // One authoritative category setting applies to every patch inside it.
+    // Legacy categories retain their existing locked behavior until explicitly set free.
+    func categoryRequiresKey(_ id: String, fallback: Bool = true) -> Bool {
+        guard let category = categories.first(where: { $0.id.caseInsensitiveCompare(id) == .orderedSame }) else {
+            return fallback
+        }
+        return category.contentType == "patch" && category.requiresKey
+    }
 }
 
 struct RemoteContentManifest: Codable, Equatable {
@@ -623,7 +624,6 @@ enum RemoteContentSyncError: LocalizedError {
 @MainActor
 final class RemoteContentStore: ObservableObject {
     @Published private(set) var installedFiles: [RemoteContentFile] = []
-    private(set) var allInstalledFiles: [RemoteContentFile] = []
     @Published private(set) var appContent: NexusAppContent = .empty
     @Published private(set) var remoteVersion = 0
     @Published private(set) var statusText = "Ready"
@@ -635,6 +635,7 @@ final class RemoteContentStore: ObservableObject {
     private let session: URLSession
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
+    private var syncingContent: NexusAppContent = .empty
     private let minimumAutomaticInterval: TimeInterval = 10 * 60
     private var lastAutomaticAttempt: Date?
 
@@ -647,7 +648,6 @@ final class RemoteContentStore: ObservableObject {
     func loadLocalState() {
         guard let manifest = try? loadLocalManifest() else {
             installedFiles = []
-            allInstalledFiles = []
             appContent = .empty
             remoteVersion = 0
             return
@@ -656,17 +656,19 @@ final class RemoteContentStore: ObservableObject {
             // Do not expose or apply a cache whose manifest was replaced
             // outside the app. The next automatic sync will repair it.
             installedFiles = []
-            allInstalledFiles = []
             appContent = .empty
             remoteVersion = 0
             statusText = "Security check required"
             detailText = "Remote content will be verified during synchronization."
             return
         }
-        allInstalledFiles = manifest.files.filter(\.isAvailable)
-        installedFiles = displayFiles(from: allInstalledFiles)
+        installedFiles = manifest.files.filter(\.isAvailable)
         appContent = manifest.appContent
         remoteVersion = manifest.version
+    }
+
+    func requiresKey(for file: RemoteContentFile) -> Bool {
+        appContent.categoryRequiresKey(file.category, fallback: file.requiresKey)
     }
 
     func syncIfPossible(force: Bool = false) {
@@ -691,6 +693,7 @@ final class RemoteContentStore: ObservableObject {
 
         do {
             let manifest = try await fetchManifest()
+            syncingContent = manifest.appContent
             try validate(manifest)
             let localManifest = try? loadLocalManifest()
             let plan = try makePlan(remote: manifest, local: localManifest)
@@ -698,8 +701,7 @@ final class RemoteContentStore: ObservableObject {
             if plan.changed.isEmpty && plan.obsolete.isEmpty {
                 try saveLocalManifest(manifest)
                 BundledPatchSeeder.seedIfNeeded()
-                allInstalledFiles = manifest.files.filter(\.isAvailable)
-                installedFiles = displayFiles(from: allInstalledFiles)
+                installedFiles = manifest.files.filter(\.isAvailable)
                 appContent = manifest.appContent
                 remoteVersion = manifest.version
                 progress = 1
@@ -744,8 +746,7 @@ final class RemoteContentStore: ObservableObject {
 
             try saveLocalManifest(manifest)
             BundledPatchSeeder.seedIfNeeded()
-            allInstalledFiles = manifest.files.filter(\.isAvailable)
-            installedFiles = displayFiles(from: allInstalledFiles)
+            installedFiles = manifest.files.filter(\.isAvailable)
             appContent = manifest.appContent
             remoteVersion = manifest.version
             progress = 1
@@ -760,22 +761,6 @@ final class RemoteContentStore: ObservableObject {
         }
 
         isBusy = false
-    }
-
-    func files(for file: RemoteContentFile) -> [RemoteContentFile] {
-        let groupID = file.patchGroupID
-        return allInstalledFiles
-            .filter { $0.patchGroupID == groupID }
-            .sorted {
-                $0.combinedOrder == $1.combinedOrder
-                    ? $0.fileName.localizedCaseInsensitiveCompare($1.fileName) == .orderedAscending
-                    : $0.combinedOrder < $1.combinedOrder
-            }
-    }
-
-    private func displayFiles(from files: [RemoteContentFile]) -> [RemoteContentFile] {
-        var seen = Set<String>()
-        return files.filter { seen.insert($0.patchGroupID).inserted }
     }
 
     private struct SyncPlan {
@@ -887,6 +872,11 @@ final class RemoteContentStore: ObservableObject {
         var changed: [RemoteContentFile] = []
 
         for file in remoteFiles {
+            if remote.appContent.categoryRequiresKey(file.category, fallback: file.requiresKey) && !ContentLicenseStore.hasAccess(category: file.category) {
+                // Keep protected metadata visible, but never download a
+                // payload until the individual grant is present.
+                continue
+            }
             let installed = localByID[file.id]
             let targetURL = localURL(for: file)
             let metadataChanged = installed?.version != file.version
@@ -908,7 +898,9 @@ final class RemoteContentStore: ObservableObject {
         }
 
         let obsolete = localFiles.filter { file in
-            !remoteIDs.contains(file.id) || explicitlyDeletedIDs.contains(file.id)
+            !remoteIDs.contains(file.id)
+                || explicitlyDeletedIDs.contains(file.id)
+                || (remote.appContent.categoryRequiresKey(file.category, fallback: file.requiresKey) && !ContentLicenseStore.hasAccess(category: file.category))
         }
 
         log(
@@ -925,12 +917,40 @@ final class RemoteContentStore: ObservableObject {
     }
 
     private func download(_ file: RemoteContentFile, into stagingRoot: URL) async throws -> URL {
-        let sourceURL = try objectURL(for: file.storagePath)
+        guard !syncingContent.categoryRequiresKey(file.category, fallback: file.requiresKey) || ContentLicenseStore.hasAccess(category: file.category) else {
+            throw RemoteContentSyncError.server("Esta categoría requiere una key válida.")
+        }
+        // Ciphertext remains in private Storage; the Edge Function verifies the
+        // general app license, the category license and the exact published file.
+        // The server decrypts using a secret that is never built into this IPA.
+        let encrypted = file.storagePath.hasSuffix(".nex")
+        let sourceURL: URL
+        if encrypted {
+            guard let url = URL(string: SupabaseLicenseConfig.projectURL.absoluteString
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                + "/functions/v1/nexus-secure-patch?mode=download") else {
+                throw RemoteContentSyncError.badURL
+            }
+            sourceURL = url
+        } else {
+            sourceURL = try objectURL(for: file.storagePath)
+        }
         var request = URLRequest(url: sourceURL)
         request.timeoutInterval = 60
         request.setValue(SupabaseLicenseConfig.publishableKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(SupabaseLicenseConfig.publishableKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+        if encrypted {
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let payload: [String: String] = [
+                "content_id": file.id,
+                "device_id": UserDefaults.standard.string(forKey: "greeg.license.device") ?? "",
+                "app_key": UserDefaults.standard.string(forKey: "greeg.license.key")?.normalizedLicenseKey ?? "",
+                "category_key": ContentLicenseStore.sessionKey(for: file.category) ?? ""
+            ]
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        }
 
         let (temporaryURL, response) = try await session.download(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
@@ -1224,6 +1244,8 @@ enum RemoteContentLibrary {
         fileManager: FileManager = .default
     ) -> URL? {
         guard let manifest = loadManifest(fileManager: fileManager),
+              (!manifest.appContent.categoryRequiresKey(file.category, fallback: file.requiresKey)
+                || ContentLicenseStore.hasAccess(category: file.category)),
               let trustedFile = manifest.files.first(where: {
                   $0.id == file.id && $0.cacheRelativePath == file.cacheRelativePath && $0.isAvailable
               }) else {

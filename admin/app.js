@@ -4,7 +4,7 @@ const SUPABASE_URL = "https://oxtyyazqagmfhkgprpsp.supabase.co";
 const SUPABASE_KEY = "sb_publishable_IEtNXoVHdutPKd4g_ej0MA_IF-yXUR8";
 const BUCKET = "nexus-hack-content";
 const UI_BUCKET = "nexus-hack-ui";
-const SCRIPT_VERSION = "20261019-3105-import";
+const SCRIPT_VERSION = "20261024-3105-support";
 const DEFAULT_TARGET_BUNDLE = "com.dts.freefireth";
 const FREE_FIRE_MAX_BUNDLE = "com.dts.freefiremax";
 const ASSET_INDEXER_DIRECTORY = "Documents/contentcache/Compulsory/ios/gameassetbundles/avatar";
@@ -148,6 +148,7 @@ const state = {
   editorMode: "category",
   session: null,
   busy: false,
+  activeAdminView: "patches",
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -175,15 +176,10 @@ const els = {
   assetVariantInput: $("#assetVariantInput"),
   targetPathInput: $("#targetPathInput"),
   descriptionInput: $("#descriptionInput"),
+  requiresKeyInput: $("#requiresKeyInput"),
+  priceUSDInput: $("#priceUSDInput"),
   packageModeLabel: $("#packageModeLabel"),
   importedPackageInput: $("#importedPackageInput"),
-  combinedPatchLabel: $("#combinedPatchLabel"),
-  combinedPatchInput: $("#combinedPatchInput"),
-  combinedPatchFields: $("#combinedPatchFields"),
-  combinedFileOneInput: $("#combinedFileOneInput"),
-  combinedPathOneInput: $("#combinedPathOneInput"),
-  combinedFileTwoInput: $("#combinedFileTwoInput"),
-  combinedPathTwoInput: $("#combinedPathTwoInput"),
   thumbnailInput: $("#thumbnailInput"),
   textContentLabel: $("#textContentLabel"),
   textContentInput: $("#textContentInput"),
@@ -213,6 +209,7 @@ const els = {
   keyDurationInput: $("#keyDurationInput"),
   keyDurationUnitInput: $("#keyDurationUnitInput"),
   keyLabelInput: $("#keyLabelInput"),
+  keyContentInput: $("#keyContentInput"),
   customKeyInput: $("#customKeyInput"),
   specialAssetIndexerInput: $("#specialAssetIndexerInput"),
   createKeysButton: $("#createKeysButton"),
@@ -250,6 +247,7 @@ async function init() {
   });
 
   bindEvents();
+  setAdminView(window.location.hash.slice(1), false);
   try {
     const { data } = await withTimeout(
       supabaseClient.auth.getSession(),
@@ -273,19 +271,34 @@ function bindEvents() {
   els.resetPasswordButton.addEventListener("click", resetPassword);
   els.signOutButton.addEventListener("click", signOut);
   els.fileForm.addEventListener("submit", saveFile);
+  document.querySelector("#exportedPackageForm")?.addEventListener("submit", saveExportedPackage);
+  document.querySelector("#packageCategoryInput")?.addEventListener("change", () => renderExportedPackageOptions(true));
+  document.querySelector("#packagePlacementInput")?.addEventListener("change", updateExportedPackagePlacement);
+  document.querySelector("#packageFileInput")?.addEventListener("change", suggestExportedPackageName);
+  document.querySelector("#packageRefreshButton")?.addEventListener("click", () => { renderExportedPackageOptions(); loadFiles(); });
   els.newButton.addEventListener("click", resetForm);
   els.refreshButton.addEventListener("click", loadFiles);
   els.publishButton.addEventListener("click", publishChanges);
   els.searchInput.addEventListener("input", renderFiles);
   els.refreshKeysButton.addEventListener("click", loadKeys);
+  document.querySelector("#refreshAppKeysButton")?.addEventListener("click", loadKeys);
+  document.querySelector("#appKeyForm")?.addEventListener("submit", createAppKeys);
+  document.querySelector("#appKeySearchInput")?.addEventListener("input", renderAppKeys);
+  document.querySelector("#appCopyGeneratedKeysButton")?.addEventListener("click", copyAppKeys);
+  document.querySelector("#appKeyDurationUnitInput")?.addEventListener("change", syncAppDuration);
+  document.querySelector("#appCustomKeyInput")?.addEventListener("input", syncAppQuantity);
   els.keySearchInput.addEventListener("input", renderKeys);
+  document.querySelector("#keyCategoryFilter")?.addEventListener("change", renderKeys);
+  document.querySelectorAll("[data-admin-target]").forEach(button => button.addEventListener("click", () => setAdminView(button.dataset.adminTarget)));
   els.keyForm.addEventListener("submit", createKeys);
+  document.querySelector("#goCreateCategoryKeys")?.addEventListener("click", openCategoryKeyGenerator);
   els.copyGeneratedKeysButton.addEventListener("click", copyGeneratedKeys);
   els.loadSettingsButton.addEventListener("click", loadSettings);
   els.saveSettingsButton.addEventListener("click", saveSettings);
   els.newCategoryButton.addEventListener("click", () => openCategoryEditor());
   els.cancelCategoryButton.addEventListener("click", closeCategoryEditor);
   els.categoryForm.addEventListener("submit", saveCategoryFromForm);
+  els.categoryContentTypeInput.addEventListener("change", syncCategoryKeyEditor);
   els.keyDurationUnitInput.addEventListener("change", syncDurationInput);
   els.customKeyInput.addEventListener("input", syncCustomKeyQuantity);
   els.nameInput.addEventListener("input", () => {
@@ -301,7 +314,6 @@ function bindEvents() {
   });
   els.categoryInput.addEventListener("change", updateCategoryTypeUI);
   els.importedPackageInput.addEventListener("change", updatePackageMode);
-  els.combinedPatchInput.addEventListener("change", updateCombinedPatchMode);
   els.targetBundleInput.addEventListener("change", syncAssetVariantWithTargetBundle);
   els.assetVariantInput.addEventListener("change", () => {
     applyAssetVariant(els.assetVariantInput.value);
@@ -313,6 +325,7 @@ function bindEvents() {
     updateAssetVariantVisibility();
   });
   renderPresets();
+  syncAppDuration();
   syncDurationInput();
 }
 
@@ -438,6 +451,8 @@ function setSession(session) {
   const signedIn = Boolean(session);
   els.loginPanel.classList.toggle("hidden", signedIn);
   els.adminPanel.classList.toggle("hidden", !signedIn);
+  document.querySelector("#adminNavigation")?.classList.toggle("hidden", !signedIn);
+  if (signedIn) setAdminView(state.activeAdminView, false);
   els.signOutButton.classList.toggle("hidden", !signedIn);
   els.sessionEmail.textContent = session?.user?.email ?? "Sin sesion";
 
@@ -451,7 +466,21 @@ function setSession(session) {
     state.licenses = [];
     renderFiles();
     renderKeys();
+    renderAppKeys();
   }
+}
+
+function setAdminView(target = "patches", updateHash = true) {
+  const view = ["patches", "categories", "keys", "app-keys", "packages"].includes(target) ? target : "patches";
+  state.activeAdminView = view;
+  document.querySelectorAll("[data-admin-view]").forEach(panel => panel.classList.toggle("hidden", panel.dataset.adminView !== view));
+  document.querySelectorAll("[data-admin-target]").forEach(button => {
+    const active = button.dataset.adminTarget === view;
+    button.classList.toggle("isActive", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  if (updateHash) window.history.replaceState(null, "", "#" + view);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 async function loadFiles() {
@@ -468,6 +497,9 @@ async function loadFiles() {
   }
 
   state.files = (data ?? []).filter(isGreegFile);
+  renderExportedPackageOptions();
+  refreshKeyContentOptions();
+  renderCategoryEditor();
   setStatus("Listo. Recuerda publicar para que los iPhone reciban los cambios.");
   renderFiles();
 }
@@ -481,16 +513,19 @@ async function loadKeys() {
     els.keysStatusText.textContent = adminErrorMessage(error);
     state.licenses = [];
     renderKeys();
+    renderAppKeys();
     return;
   }
 
   state.licenses = data ?? [];
+  renderCategoryEditor();
   els.keysStatusText.textContent = "Keys cargadas. La activacion se valida en Supabase.";
   renderKeys();
+  renderAppKeys();
 }
 
 const DEFAULT_APP_CONTENT = {
-  title: "NEXUS HACK",
+  title: "NEXUS",
   subtitle: "Control privado",
   announcement: { title: "Centro NEXUS", body: "Sincroniza para recibir las novedades.", icon: "sparkles", color: "blue" },
   categories: [
@@ -506,7 +541,8 @@ const DEFAULT_APP_CONTENT = {
     { id: "support", title: "Soporte", icon: "headphones.circle.fill", kind: "support", enabled: true, sort_order: 5 }
   ],
   socials: [
-    { title: "Discord", subtitle: "Comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
+    { title: "Discord de la app", subtitle: "Soporte oficial de NEXUS", url: "https://discord.gg/tz87yCBgq", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
+    { title: "Discord de la comunidad", subtitle: "Comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "person.3.fill", color: "blue" },
     { title: "TikTok", subtitle: "@tumbado_sensi7", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black" }
   ]
 };
@@ -519,13 +555,23 @@ async function loadSettings() {
     els.settingsStatusText.textContent = adminErrorMessage(error);
     return;
   }
-  state.appContent = data || structuredClone(DEFAULT_APP_CONTENT);
+  state.appContent = addNexusDiscordLinks(data || structuredClone(DEFAULT_APP_CONTENT));
   if (!Array.isArray(state.appContent.tabs) || state.appContent.tabs.length === 0) {
     state.appContent.tabs = structuredClone(DEFAULT_APP_CONTENT.tabs);
   }
   els.settingsInput.value = JSON.stringify(state.appContent, null, 2);
   renderCategoryEditor();
   els.settingsStatusText.textContent = "Diseno cargado. Puedes editar categorias, subcategorias, anuncios y redes.";
+}
+
+function addNexusDiscordLinks(content) {
+  const links = Array.isArray(content.socials) ? content.socials : [];
+  const required = [
+    { title: "Discord de la app", subtitle: "Soporte oficial de NEXUS", url: "https://discord.gg/tz87yCBgq", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
+    { title: "Discord de la comunidad", subtitle: "Comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "person.3.fill", color: "blue" }
+  ];
+  const urls = new Set(required.map(x => x.url.toLowerCase()));
+  return { ...content, socials: [...required, ...links.filter(x => !urls.has(String(x.url || "").toLowerCase()))] };
 }
 
 const BUILTIN_CATEGORY_CHOICES = [
@@ -543,6 +589,21 @@ function categoryContentType(category) {
   const hasChildren = Boolean(category?.id && (state.appContent?.categories || []).some((item) => item.parent_id === category.id));
   if (hasChildren) return "container";
   return value === "text" ? "text" : value === "container" ? "container" : "patch";
+}
+
+function categoryNeedsKey(category) {
+  if (!category || categoryContentType(category) !== "patch") return false;
+  const configured = (state.appContent?.categories || []).find(c => c.id === category.id);
+  const source = configured || category;
+  // Conserva el estado protegido para categorias antiguas sin bandera explicita.
+  return typeof source.requires_key === "boolean" ? source.requires_key : true;
+}
+function syncCategoryKeyEditor() {
+  const field = document.querySelector("#categoryRequireKeyInput");
+  const label = document.querySelector("#categoryKeyLabel");
+  const disabled = els.categoryContentTypeInput.value !== "patch" || state.editorMode === "tab";
+  if (label) label.classList.toggle("hidden", disabled);
+  if (field) field.disabled = disabled;
 }
 
 function categoryById(id) {
@@ -613,11 +674,8 @@ function updateCategoryTypeUI() {
   els.fileInput.required = !isText && !isContainer;
   if (!isText) els.textContentInput.value = "";
   if (isText || isContainer) els.importedPackageInput.checked = false;
-  if (isText || isContainer) els.combinedPatchInput.checked = false;
   els.packageModeLabel.classList.toggle("hidden", isText || isContainer);
-  els.combinedPatchLabel.classList.toggle("hidden", isText || isContainer);
   updatePackageMode();
-  updateCombinedPatchMode();
   suggestTargetPath();
 }
 
@@ -626,7 +684,6 @@ function updatePackageMode() {
   const category = categoryById(els.categoryInput.value) || allCategoryChoices().find((item) => item.id === els.categoryInput.value);
   const allowed = categoryContentType(category) === "patch";
   els.importedPackageInput.disabled = !allowed;
-  if (!allowed) els.combinedPatchInput.checked = false;
   els.packageModeLabel.classList.toggle("hidden", !allowed);
   els.fileInput.accept = packageMode ? ".3105,application/vnd.greeg.3105,application/octet-stream" : "";
   els.targetPathInput.placeholder = packageMode ? "packages/mi-patch/mi-patch.3105" : "patches/mi-patch.bundle";
@@ -636,30 +693,11 @@ function updatePackageMode() {
   } else {
     updateAssetVariantVisibility();
   }
-  updateCombinedPatchMode();
-}
-
-function updateCombinedPatchMode() {
-  const category = categoryById(els.categoryInput.value) || allCategoryChoices().find((item) => item.id === els.categoryInput.value);
-  const allowed = categoryContentType(category) === "patch";
-  const enabled = allowed && Boolean(els.combinedPatchInput.checked);
-  els.combinedPatchInput.disabled = !allowed || els.importedPackageInput.checked;
-  if (!allowed || els.importedPackageInput.checked) els.combinedPatchInput.checked = false;
-  els.combinedPatchFields.classList.toggle("hidden", !enabled);
-  els.fileUploadLabel.classList.toggle("hidden", enabled || categoryContentType(category) === "container");
-  els.fileInput.required = !enabled && allowed;
-  els.combinedFileOneInput.required = enabled;
-  els.combinedFileTwoInput.required = enabled;
-  els.combinedPathOneInput.required = enabled;
-  els.combinedPathTwoInput.required = enabled;
-  if (enabled) {
-    els.assetVariantLabel.classList.add("hidden");
-    els.targetPathInput.required = false;
-    els.importedPackageInput.checked = false;
-  }
 }
 
 function renderCategoryEditor() {
+  renderExportedPackageOptions();
+  refreshKeyContentOptions();
   const content = state.appContent || DEFAULT_APP_CONTENT;
   const categories = Array.isArray(content.categories) ? content.categories : [];
   els.categoryParentInput.innerHTML = '<option value="">Sin padre</option>' + categories
@@ -679,11 +717,84 @@ function renderCategoryEditor() {
     <article class="categoryEditorCard">
       <div class="categoryEditorIcon"><span class="sfIcon">${escapeHtml(category.icon || "square.grid.2x2.fill")}</span></div>
       <div class="categoryEditorMain"><strong>${escapeHtml(categoryPath(category.id, categories))}</strong><span>${escapeHtml(category.subtitle || "Sin descripción")}</span><small>${escapeHtml(category.color || "blue")} · ${categoryContentType(category) === "container" ? "Contenedor" : categoryContentType(category) === "text" ? "Texto" : "Patch"} · orden ${Number(category.sort_order || 0)}</small></div>
-      <div class="categoryEditorActions"><button class="ghost categoryEditButton" data-category-id="${escapeHtml(category.id)}" type="button">Editar</button><button class="ghost categoryDeleteButton" data-category-id="${escapeHtml(category.id)}" type="button">Eliminar</button></div>
+      <div class="categoryEditorActions"><button class="ghost categoryEditButton" data-category-id="${escapeHtml(category.id)}" type="button">Editar</button><button class="ghost categoryKeysButton" data-category-id="${escapeHtml(category.id)}" type="button">Gestionar keys</button><button class="ghost categoryDeleteButton" data-category-id="${escapeHtml(category.id)}" type="button">Eliminar</button></div>
     </article>`).join("") : '<p class="muted">Todavía no hay categorías. Pulsa Nueva categoría.</p>';
   els.categoryList.querySelectorAll(".categoryEditButton").forEach((button) => button.addEventListener("click", () => openCategoryEditor(button.dataset.categoryId)));
+  els.categoryList.querySelectorAll(".categoryKeysButton").forEach(button => button.addEventListener("click", () => {
+    const category = categoryById(button.dataset.categoryId) || allCategoryChoices().find(c => c.id === button.dataset.categoryId);
+    if (categoryContentType(category) !== "patch") {
+      document.querySelector("#quickKeyCategoryStatus").textContent = "Solo las categorías de patches pueden recibir keys de acceso.";
+      return;
+    }
+    els.keyContentInput.value = button.dataset.categoryId;
+    document.querySelector("#keyCategoryFilter").value = button.dataset.categoryId;
+    setAdminView("keys");
+    renderKeys();
+  }));
   els.categoryList.querySelectorAll(".categoryDeleteButton").forEach((button) => button.addEventListener("click", () => deleteCategory(button.dataset.categoryId)));
+  renderCategoryAccessList();
   renderTabEditor();
+}
+
+function renderCategoryAccessList() {
+  const list = document.querySelector("#categoryAccessList");
+  if (!list) return;
+  list.replaceChildren();
+  const all = allCategoryChoices();
+  const categories = all.filter(c => categoryContentType(c) === "patch")
+    .sort((a,b) => categoryPath(a.id,all).localeCompare(categoryPath(b.id,all),"es"));
+  if (!categories.length) {
+    const message = document.createElement("p");
+    message.className = "muted"; message.textContent = "Todavia no tienes categorias de patches.";
+    list.append(message); return;
+  }
+  for (const cat of categories) {
+    const row = document.createElement("div"); row.className = "categoryAccessRow";
+    const info = document.createElement("div"); info.className = "categoryAccessName";
+    const title = document.createElement("strong"); title.textContent = categoryPath(cat.id, all);
+    const subtitle = document.createElement("small"); subtitle.textContent = "ID: " + cat.id;
+    info.append(title,subtitle);
+    const control = document.createElement("label"); control.className = "categoryAccessToggle";
+    const check = document.createElement("input"); check.type = "checkbox"; check.checked = categoryNeedsKey(cat);
+    const wording = document.createElement("span"); wording.textContent = check.checked ? "Con key" : "Libre";
+    check.addEventListener("change", async () => {
+      check.disabled = true;
+      await updateCategoryAccess(cat, check.checked);
+      check.disabled = false;
+    });
+    control.append(check,wording);
+    row.append(info,control);
+    list.append(row);
+  }
+}
+async function updateCategoryAccess(cat, needsKey) {
+  const status = document.querySelector("#categoryAccessStatus");
+  if (!state.session || state.busy) return;
+  const copy = structuredClone(state.appContent || DEFAULT_APP_CONTENT);
+  copy.categories = Array.isArray(copy.categories) ? copy.categories : [];
+  let configured = copy.categories.find(c => c.id === cat.id);
+  if (!configured) {
+    configured = { id: cat.id, title: cat.title || cat.id, subtitle: cat.subtitle || "",
+      icon: cat.icon || "shippingbox.fill", color: cat.color || "blue",
+      content_type: "patch", parent_id: cat.parent_id || null, sort_order: Number(cat.sort_order || 0) };
+    copy.categories.push(configured);
+  }
+  configured.requires_key = Boolean(needsKey);
+  if (status) status.textContent = "Guardando configuracion en Supabase...";
+  setBusy(true, "Guardando acceso por categoria...");
+  const { error } = await supabaseClient.rpc("admin_update_app_settings", { p_content: copy });
+  setBusy(false);
+  if (error) {
+    if (status) status.textContent = adminErrorMessage(error);
+    renderCategoryAccessList();
+    return;
+  }
+  state.appContent = copy;
+  els.settingsInput.value = JSON.stringify(copy,null,2);
+  renderCategoryEditor();
+  if (status) status.textContent = needsKey
+    ? "Categoria activada con key. Genera claves en Keys de categorias."
+    : "Categoria marcada libre en el panel. Publica los cambios y actualiza a la IPA NEXUS V3 para que sus patches sean libres.";
 }
 
 function renderTabEditor() {
@@ -734,6 +845,8 @@ function openCategoryEditor(id = "") {
   els.categoryContentTypeInput.closest("label")?.classList.remove("hidden");
   els.categoryParentInput.closest("label")?.classList.remove("hidden");
   els.categoryOrderInput.value = String(category?.sort_order ?? ((state.appContent?.categories || []).length * 10));
+  document.querySelector("#categoryRequireKeyInput").checked = category ? categoryNeedsKey(category) : false;
+  syncCategoryKeyEditor();
   renderCategoryEditor();
   els.categoryParentInput.value = category?.parent_id || "";
   els.categoryNameInput.focus();
@@ -753,6 +866,7 @@ function openTabEditor(id) {
   els.categoryContentTypeInput.closest("label")?.classList.add("hidden");
   els.categoryOrderInput.value = String(tab.sort_order || 0);
   els.categoryParentInput.closest("label")?.classList.add("hidden");
+  document.querySelector("#categoryKeyLabel")?.classList.add("hidden");
   els.categoryIconFileInput.value = "";
   els.categoryNameInput.focus();
 }
@@ -763,6 +877,7 @@ function closeCategoryEditor() {
   els.editingCategoryId.value = "";
   els.categoryParentInput.closest("label")?.classList.remove("hidden");
   els.categoryContentTypeInput.closest("label")?.classList.remove("hidden");
+  syncCategoryKeyEditor();
   renderCategoryEditor();
 }
 
@@ -808,7 +923,7 @@ async function saveCategoryFromForm(event) {
   const parentID = els.categoryParentInput.value || null;
   const parent = content.categories.find((category) => category.id === parentID);
   if (parent) parent.content_type = "container";
-  const item = { id, title: els.categoryNameInput.value.trim(), subtitle: els.categorySubtitleInput.value.trim(), icon: els.categoryIconInput.value.trim() || "square.grid.2x2.fill", icon_url: iconURL, color: els.categoryColorInput.value, content_type: contentType, parent_id: parentID, sort_order: Number(els.categoryOrderInput.value || 0) };
+  const item = { id, title: els.categoryNameInput.value.trim(), subtitle: els.categorySubtitleInput.value.trim(), icon: els.categoryIconInput.value.trim() || "square.grid.2x2.fill", icon_url: iconURL, color: els.categoryColorInput.value, content_type: contentType, parent_id: parentID, sort_order: Number(els.categoryOrderInput.value || 0), requires_key: contentType === "patch" && document.querySelector("#categoryRequireKeyInput").checked };
   const index = content.categories.findIndex((category) => category.id === els.editingCategoryId.value);
   if (index >= 0) content.categories[index] = item;
   else content.categories.push(item);
@@ -858,6 +973,7 @@ async function saveSettings() {
     return;
   }
   if (!Array.isArray(content.tabs) || content.tabs.length === 0) content.tabs = structuredClone(DEFAULT_APP_CONTENT.tabs);
+  content = addNexusDiscordLinks(content);
   state.appContent = content;
   renderCategoryEditor();
   setBusy(true, "Guardando diseno remoto...");
@@ -877,7 +993,13 @@ async function createKeys(event) {
   const quantity = customKey ? 1 : clampNumber(els.keyQuantityInput.value, 1, 200);
   const durationHours = durationToHours(els.keyDurationInput.value, els.keyDurationUnitInput.value);
   const label = els.keyLabelInput.value.trim();
+  const categoryID = els.keyContentInput.value.trim().toLowerCase();
+  if (!categoryID || !allCategoryChoices().some(c => c.id === categoryID && categoryNeedsKey(c))) {
+    els.keysStatusText.textContent = "Selecciona una categoría activada Con key.";
+    return;
+  }
   const capabilities = els.specialAssetIndexerInput.checked ? ["special_assetindexer"] : [];
+  capabilities.push(`category:${categoryID}`);
 
   if (customKey && !customKey.startsWith("NEXUS-")) {
     els.keysStatusText.textContent = "La key personalizada debe empezar con NEXUS-.";
@@ -911,6 +1033,120 @@ async function createKeys(event) {
   }
 }
 
+function appKeysOf(licenses = state.licenses) {
+  return licenses.filter(license => !(Array.isArray(license.capabilities) ? license.capabilities : [])
+    .some(cap => typeof cap === "string" && cap.startsWith("category:")));
+}
+
+function syncAppDuration() {
+  const unit = document.querySelector("#appKeyDurationUnitInput");
+  const input = document.querySelector("#appKeyDurationInput");
+  if (!unit || !input) return;
+  input.disabled = unit.value === "lifetime";
+  if (input.disabled) input.value = "0";
+}
+function syncAppQuantity() {
+  const custom = document.querySelector("#appCustomKeyInput");
+  const quantity = document.querySelector("#appKeyQuantityInput");
+  if (!custom || !quantity) return;
+  quantity.disabled = Boolean(custom.value.trim());
+  if (quantity.disabled) quantity.value = "1";
+}
+async function createAppKeys(event) {
+  event.preventDefault();
+  const get = id => document.querySelector("#" + id);
+  const status = get("appKeysStatusText");
+  const create = get("appCreateKeysButton");
+  const custom = get("appCustomKeyInput").value.trim().toUpperCase();
+  if (custom && !custom.startsWith("NEXUS-")) {
+    status.textContent = "La key personalizada debe empezar con NEXUS-."; return;
+  }
+  const quantity = custom ? 1 : clampNumber(get("appKeyQuantityInput").value, 1, 200);
+  const duration = durationToHours(get("appKeyDurationInput").value, get("appKeyDurationUnitInput").value);
+  create.disabled = true;
+  status.textContent = "Generando keys normales en Supabase...";
+  try {
+    const { data, error } = await supabaseClient.rpc("admin_generate_licenses", {
+      p_quantity: quantity,
+      p_duration_hours: duration,
+      p_label: get("appKeyLabelInput").value.trim() || null,
+      p_capabilities: [],
+      p_custom_license_key: custom || null,
+    });
+    if (error || data?.success === false) throw error || new Error(data?.message || "No se pudieron generar las keys.");
+    const keys = Array.isArray(data?.keys) ? data.keys : [];
+    get("appGeneratedKeysOutput").value = keys.join("\n");
+    get("appGeneratedKeysBlock").classList.toggle("hidden", !keys.length);
+    status.textContent = keys.length + (keys.length === 1 ? " key normal creada." : " keys normales creadas.");
+    get("appCustomKeyInput").value = "";
+    syncAppQuantity();
+    await loadKeys();
+  } catch (error) {
+    status.textContent = adminErrorMessage(error);
+  } finally {
+    create.disabled = false;
+  }
+}
+async function copyAppKeys() {
+  const input = document.querySelector("#appGeneratedKeysOutput");
+  if (!input?.value.trim()) return;
+  try {
+    await navigator.clipboard.writeText(input.value.trim());
+    document.querySelector("#appKeysStatusText").textContent = "Keys normales copiadas.";
+  } catch {
+    input.select();
+    document.execCommand("copy");
+  }
+}
+
+function refreshKeyContentOptions() {
+  if (!els.keyContentInput) return;
+  const selected = els.keyContentInput.value;
+  const categories = allCategoryChoices().filter(cat => categoryContentType(cat) === "patch" && categoryNeedsKey(cat));
+  els.keyContentInput.replaceChildren(new Option("Selecciona categoría", ""));
+  for (const cat of categories) {
+    els.keyContentInput.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
+  }
+  if (categories.some(cat => cat.id === selected)) els.keyContentInput.value = selected;
+  const quickSelect = document.querySelector("#quickKeyCategorySelect");
+  if (quickSelect) {
+    const previous = quickSelect.value;
+    quickSelect.replaceChildren(new Option("Selecciona categoría", ""));
+    for (const cat of categories) {
+      quickSelect.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
+    }
+    if (categories.some(cat => cat.id === previous)) quickSelect.value = previous;
+  }
+  const filter = document.querySelector("#keyCategoryFilter");
+  if (filter) {
+    const selectedCategoryFilter = filter.value;
+    filter.replaceChildren(new Option("Todas las categorías protegidas", ""));
+    for (const cat of categories) filter.add(new Option(categoryPath(cat.id, allCategoryChoices()), cat.id));
+    if (categories.some(cat => cat.id === selectedCategoryFilter)) filter.value = selectedCategoryFilter;
+  }
+
+}
+
+function openCategoryKeyGenerator() {
+  const categoryID = document.querySelector("#quickKeyCategorySelect")?.value.trim().toLowerCase() || "";
+  const status = document.querySelector("#quickKeyCategoryStatus");
+  if (!categoryID) {
+    if (status) status.textContent = "Primero selecciona una categoría.";
+    return;
+  }
+  els.keyContentInput.value = categoryID;
+  if (els.keyContentInput.value !== categoryID) {
+    if (status) status.textContent = "La categoría no está disponible para generar keys.";
+    return;
+  }
+  if (status) status.textContent = "Categoría seleccionada. Completa cantidad y duración y pulsa Crear keys.";
+  document.querySelector("#keyCategoryFilter").value = categoryID;
+  setAdminView("keys");
+  renderKeys();
+  els.keyForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  els.keyQuantityInput.focus({ preventScroll: true });
+}
+
 async function copyGeneratedKeys() {
   const value = els.generatedKeysOutput.value.trim();
   if (!value) return;
@@ -939,7 +1175,7 @@ function syncCustomKeyQuantity() {
   }
 }
 
-async function saveFile(event) {
+async function saveFile(event, providedFile = null) {
   event.preventDefault();
   if (!state.session || state.busy) return;
 
@@ -951,13 +1187,9 @@ async function saveFile(event) {
     setStatus("Esta sección es un contenedor. Elige una subcategoría para publicar archivos.");
     return;
   }
-  if (contentType === "patch" && els.combinedPatchInput.checked) {
-    await saveCombinedFileGroup(selectedCategory);
-    return;
-  }
   const textBody = els.textContentInput.value.trim();
   const packageMode = contentType === "patch" && els.importedPackageInput.checked;
-  let file = els.fileInput.files?.[0] || null;
+  let file = providedFile || els.fileInput.files?.[0] || null;
   if (contentType === "text") {
     if (!textBody) {
       setStatus("Escribe el contenido de texto antes de publicar.");
@@ -988,7 +1220,7 @@ async function saveFile(event) {
     return;
   }
   if (!targetPath) {
-    setStatus("Completa la ruta que va a reemplazar en NEXUS HACK.");
+    setStatus("Completa la ruta que va a reemplazar en NEXUS.");
     return;
   }
   if (!isCompleteTargetPath(targetPath)) {
@@ -1000,18 +1232,36 @@ async function saveFile(event) {
   try {
     const hash = await sha256Hex(file);
     let uploadedPath = "";
-    const storagePath = `content/${crypto.randomUUID()}/${safeStorageFileName(file.name)}`;
+    const secureUpload = contentType === "patch" && document.querySelector("#securePatchUpload")?.checked === true;
+    const safeName = safeStorageFileName(file.name).slice(0, 110);
+    const storagePath = secureUpload
+      ? `content/${crypto.randomUUID()}/${safeName}.nex`
+      : `content/${crypto.randomUUID()}/${safeName}`;
 
-    setStatus("Subiendo archivo...");
-    const { error: uploadError } = await supabaseClient.storage
-      .from(BUCKET)
-      .upload(storagePath, file, {
-        cacheControl: "3600",
-        contentType: file.type || "application/octet-stream",
-        upsert: true,
+    setStatus(secureUpload ? "Cifrando el patch en Supabase..." : "Subiendo archivo...");
+    if (secureUpload) {
+      if (file.size > 12 * 1024 * 1024) throw new Error("El servidor seguro permite patches de hasta 12 MiB.");
+      const response = await fetch(SUPABASE_URL + "/functions/v1/nexus-secure-patch?mode=upload", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + state.session.access_token,
+          "apikey": SUPABASE_KEY,
+          "Content-Type": "application/octet-stream",
+          "X-Nexus-Path": storagePath,
+        },
+        body: file,
       });
-
-    if (uploadError) throw uploadError;
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success || result.storage_path !== storagePath) {
+        throw new Error(result.error || "No se pudo subir cifrado: comprueba la Edge Function y su secreto.");
+      }
+    } else {
+      const { error: uploadError } = await supabaseClient.storage.from(BUCKET)
+        .upload(storagePath, file, {
+          cacheControl: "3600", contentType: file.type || "application/octet-stream", upsert: false
+        });
+      if (uploadError) throw uploadError;
+    }
     uploadedPath = storagePath;
 
     let thumbnailPath = els.descriptionInput.dataset.thumbnailPath || thumbnailMarkerFromDescription(els.descriptionInput.value);
@@ -1053,6 +1303,8 @@ async function saveFile(event) {
       p_storage_path: storagePath,
       p_content_type: contentType,
       p_text_content: contentType === "text" ? textBody : null,
+      p_requires_key: contentType === "patch" && categoryNeedsKey(selectedCategory),
+      p_price_usd: Math.max(0.01, Number(els.priceUSDInput.value || 15)),
       p_force_new: !isReplacing,
     });
 
@@ -1069,6 +1321,7 @@ async function saveFile(event) {
       ? `${contentType === "text" ? "Texto" : "Patch"} reemplazado. Pulsa Publicar cambios cuando estes listo.`
       : `${contentType === "text" ? "Texto" : "Patch"} nuevo creado. Pulsa Publicar cambios cuando estes listo.`
     );
+    return true;
   } catch (error) {
     const message = adminErrorMessage(error);
     setStatus(message);
@@ -1078,108 +1331,153 @@ async function saveFile(event) {
   }
 }
 
-async function saveCombinedFileGroup(selectedCategory) {
-  const name = els.nameInput.value.trim();
-  const slug = safeSlug(els.slugInput.value || name);
-  const fileOne = els.combinedFileOneInput.files?.[0] || null;
-  const fileTwo = els.combinedFileTwoInput.files?.[0] || null;
-  const pathOne = safeRelativePath(els.combinedPathOneInput.value);
-  const pathTwo = safeRelativePath(els.combinedPathTwoInput.value);
-  if (!name || !slug) {
-    setStatus("Completa nombre y slug del patch combinado.");
-    return;
-  }
-  if (!fileOne || !fileTwo) {
-    setStatus("Selecciona los dos archivos del patch combinado.");
-    return;
-  }
-  if (!isCompleteTargetPath(pathOne) || !isCompleteTargetPath(pathTwo)) {
-    setStatus("Cada ruta debe incluir carpeta y archivo, por ejemplo bundles/archivo.bundle.");
-    return;
-  }
 
-  const previous = els.editingId.value ? state.files.find((file) => file.id === els.editingId.value) : null;
-  const groupID = previous?.combined_group_id || crypto.randomUUID();
-  const existingMembers = state.files
-    .filter((file) => file.combined_group_id === groupID)
-    .sort((left, right) => Number(left.combined_order || 0) - Number(right.combined_order || 0));
-  const items = [
-    { file: fileOne, path: pathOne, existing: existingMembers[0] || null },
-    { file: fileTwo, path: pathTwo, existing: existingMembers[1] || null },
-  ];
-  const uploadedPaths = [];
-  const savedIDs = [];
-  setBusy(true, "Subiendo patch combinado...");
-  try {
-    let thumbnailPath = els.descriptionInput.dataset.thumbnailPath || thumbnailMarkerFromDescription(els.descriptionInput.value);
-    const thumbnail = els.thumbnailInput.files?.[0];
-    if (thumbnail) {
-      const normalized = await normalizeImageForUpload(thumbnail);
-      thumbnailPath = `ui-icons/patch-thumbnails/${crypto.randomUUID()}.${safeStorageFileName(normalized.name).split(".").pop() || "png"}`;
-      const { error } = await supabaseClient.storage.from(UI_BUCKET).upload(thumbnailPath, normalized, {
-        cacheControl: "3600",
-        contentType: normalized.type || "image/png",
-        upsert: true,
-      });
-      if (error) throw error;
-    }
-    const description = withThumbnailMarker(els.descriptionInput.value, thumbnailPath);
-    for (const [index, item] of items.entries()) {
-      const hash = await sha256Hex(item.file);
-      const storagePath = `content/${crypto.randomUUID()}/${safeStorageFileName(item.file.name)}`;
-      const { error: uploadError } = await supabaseClient.storage.from(BUCKET).upload(storagePath, item.file, {
-        cacheControl: "3600",
-        contentType: item.file.type || "application/octet-stream",
-        upsert: true,
-      });
-      if (uploadError) throw uploadError;
-      uploadedPaths.push(storagePath);
-      const { data: saved, error: rpcError } = await supabaseClient.rpc("admin_upsert_remote_content_file", {
-        p_id: item.existing?.id || null,
-        p_name: name,
-        p_slug: index === 0 ? slug : `${slug}-2`,
-        p_category: selectedCategory.id,
-        p_target_bundle: safeTargetBundle(els.targetBundleInput.value),
-        p_target_path: item.path,
-        p_file_name: item.file.name,
-        p_mime_type: item.file.type || "application/octet-stream",
-        p_byte_size: item.file.size,
-        p_sha256: hash,
-        p_storage_path: storagePath,
-        p_description: description,
-        p_force_new: !item.existing,
-        p_content_type: "patch",
-        p_text_content: null,
-        p_combined_group_id: groupID,
-        p_combined_group_name: name,
-        p_combined_order: index,
-      });
-      if (rpcError) throw rpcError;
-      if (!item.existing && saved?.file?.id) savedIDs.push(saved.file.id);
-    }
-    resetForm();
-    await loadFiles();
-    setStatus("Patch combinado guardado. Pulsa Publicar cambios para que la app sincronice ambos archivos.");
-  } catch (error) {
-    for (const savedID of savedIDs) await supabaseClient.rpc("admin_delete_remote_content_file", { p_id: savedID }).catch(() => {});
-    if (uploadedPaths.length) await supabaseClient.storage.from(BUCKET).remove(uploadedPaths).catch(() => {});
-    const message = adminErrorMessage(error);
-    setStatus(message);
-    window.alert(message);
-  } finally {
-    setBusy(false);
+function renderExportedPackageOptions(resetPlacement = false) {
+  const catSelect = document.querySelector("#packageCategoryInput");
+  const placeSelect = document.querySelector("#packagePlacementInput");
+  if (!catSelect || !placeSelect) return;
+
+  const selectedCategory = catSelect.value;
+  const selectedPatch = resetPlacement ? "" : placeSelect.value;
+  const choices = allCategoryChoices().filter(c => categoryContentType(c) === "patch")
+    .sort((a, b) => categoryPath(a.id, allCategoryChoices()).localeCompare(categoryPath(b.id, allCategoryChoices()), "es"));
+  catSelect.replaceChildren();
+  choices.forEach(c => catSelect.add(new Option(categoryPath(c.id, allCategoryChoices()), c.id)));
+  if (choices.some(c => c.id === selectedCategory)) catSelect.value = selectedCategory;
+  const existing = state.files.filter(f => !f.deleted_at && f.category === catSelect.value)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), "es"));
+  placeSelect.replaceChildren(new Option("Crear patch nuevo en esta categoría", ""));
+  existing.forEach(f => placeSelect.add(new Option("Reemplazar: " + f.name + " (" + f.file_name + ")", f.id)));
+  if (existing.some(f => f.id === selectedPatch)) placeSelect.value = selectedPatch;
+  renderExportedPackageList();
+}
+
+function renderExportedPackageList() {
+  const list = document.querySelector("#packageList");
+  if (!list) return;
+  const packages = state.files.filter(file => !file.deleted_at &&
+    (String(file.file_name || "").toLowerCase().endsWith(".3105") ||
+     String(file.mime_type || "").toLowerCase() === "application/vnd.greeg.3105"));
+  list.replaceChildren();
+  if (!packages.length) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "Todavía no hay paquetes .3105 registrados.";
+    list.appendChild(p);
+    return;
+  }
+  packages.forEach(file => {
+    const article = document.createElement("article");
+    article.className = "packageEntry";
+    const details = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = file.name;
+    const sub = document.createElement("small");
+    sub.textContent = categoryPath(file.category, allCategoryChoices()) + " · " + file.file_name;
+    const status = document.createElement("small");
+    status.textContent = file.published_at ? "Publicado" : "Pendiente de publicar";
+    details.append(title, sub, status);
+    const button = document.createElement("button");
+    button.className = "ghost";
+    button.type = "button";
+    button.textContent = "Reemplazar";
+    button.addEventListener("click", () => {
+      const select = document.querySelector("#packageCategoryInput");
+      select.value = file.category;
+      renderExportedPackageOptions();
+      document.querySelector("#packagePlacementInput").value = file.id;
+      updateExportedPackagePlacement();
+      document.querySelector("#packageFileInput").focus();
+    });
+    article.append(details, button);
+    list.appendChild(article);
+  });
+}
+
+function updateExportedPackagePlacement() {
+  const selectedID = document.querySelector("#packagePlacementInput")?.value;
+  const existing = state.files.find(file => file.id === selectedID);
+  if (existing) {
+    document.querySelector("#packageNameInput").value = existing.name;
+    document.querySelector("#packagePriceInput").value = Number(existing.price_usd || 15).toFixed(2);
+  } else {
+    suggestExportedPackageName();
+  }
+}
+
+function suggestExportedPackageName() {
+  if (document.querySelector("#packagePlacementInput")?.value) return;
+  const file = document.querySelector("#packageFileInput")?.files?.[0];
+  if (file) document.querySelector("#packageNameInput").value =
+    file.name.replace(/\.3105$/i, "").replace(/[_-]+/g, " ").trim().slice(0, 80);
+}
+
+async function isCompatibleExported3105(file) {
+  if (!file || !is3105File(file) || file.size < 20) return false;
+  // Matches PatchPackageCodec.magic in the iOS Swift application: 3105PATCH + NUL.
+  const header = new Uint8Array(await file.slice(0, 10).arrayBuffer());
+  const expected = [51, 49, 48, 53, 80, 65, 84, 67, 72, 0];
+  return expected.every((byte, index) => header[index] === byte);
+}
+
+async function saveExportedPackage(event) {
+  event.preventDefault();
+  const status = document.querySelector("#packageStatusText");
+  const file = document.querySelector("#packageFileInput")?.files?.[0];
+  if (!state.session) { status.textContent = "Inicia sesión como administrador."; return; }
+  if (state.busy) { status.textContent = "Hay otra operación en curso."; return; }
+  if (!(await isCompatibleExported3105(file))) {
+    status.textContent = "Archivo incompatible: selecciona un .3105 real exportado desde NEXUS/3105, no un assetindexer.";
+    return;
+  }
+  const category = document.querySelector("#packageCategoryInput").value;
+  const cat = allCategoryChoices().find(c => c.id === category);
+  if (!cat || categoryContentType(cat) !== "patch") {
+    status.textContent = "Elige una categoría de patches o una subcategoría.";
+    return;
+  }
+  const existingID = document.querySelector("#packagePlacementInput").value;
+  const existing = existingID ? state.files.find(f => f.id === existingID && !f.deleted_at) : null;
+  if (existingID && (!existing || existing.category !== category)) {
+    status.textContent = "El patch elegido ya no pertenece a esta categoría.";
+    return;
+  }
+  const name = document.querySelector("#packageNameInput").value.trim();
+  if (!name) { status.textContent = "Pon un nombre al patch."; return; }
+  const slug = existing?.slug || safeSlug(name + "-" + crypto.randomUUID().slice(0, 8));
+  // Metadata-only logical path: the real destinations are inside the .3105.
+  const logicalPath = "packages/3105/" + slug + "/" + safeStorageFileName(file.name);
+  els.editingId.value = existing?.id || "";
+  els.nameInput.value = name;
+  els.slugInput.value = slug;
+  els.slugInput.dataset.touched = "true";
+  els.categoryInput.value = category;
+  els.importedPackageInput.checked = true;
+  els.targetBundleInput.value = existing?.target_bundle || DEFAULT_TARGET_BUNDLE;
+  els.targetPathInput.value = logicalPath.slice(0, 180);
+  els.targetPathInput.dataset.touched = "true";
+  els.descriptionInput.value = existing?.description || "Paquete .3105 completo: las rutas reales se encuentran dentro del archivo.";
+  els.priceUSDInput.value = document.querySelector("#packagePriceInput").value || "15.00";
+  document.querySelector("#securePatchUpload").checked = document.querySelector("#packageEncryptInput").checked;
+  els.thumbnailInput.value = "";
+  status.textContent = "Verificando y subiendo .3105 sin alterarlo...";
+  const success = await saveFile({ preventDefault() {} }, file);
+  if (success) {
+    status.textContent = "Paquete guardado. Pulsa Publicar cambios en Patches. En el iPhone selecciona Importar .3105.";
+    document.querySelector("#packageFileInput").value = "";
+    renderExportedPackageOptions(true);
+  } else {
+    status.textContent = "No se guardó. " + (document.querySelector("#statusText")?.textContent || "Revisa los detalles de subida.");
   }
 }
 
 async function toggleActive(file) {
   if (!state.session || state.busy) return;
   setBusy(true, "Actualizando estado...");
-  const members = adminGroupMembers(file);
-  let error = null;
-  for (const member of members) {
-    const result = await supabaseClient.rpc("admin_set_remote_content_active", { p_id: member.id, p_is_active: !file.is_active });
-    if (result.error) { error = result.error; break; }
-  }
+  const { error } = await supabaseClient.rpc("admin_set_remote_content_active", {
+    p_id: file.id,
+    p_is_active: !file.is_active,
+  });
   setBusy(false);
 
   if (error) {
@@ -1192,16 +1490,13 @@ async function toggleActive(file) {
 
 async function deleteFile(file) {
   if (!state.session || state.busy) return;
-  const members = adminGroupMembers(file);
-  const ok = confirm(`Eliminar "${file.combined_group_name || file.name}"?\n\n${members.length > 1 ? "Se quitaran los dos archivos del patch combinado." : "Se quitara el archivo."} El cambio se aplicara al publicar.`);
+  const ok = confirm(`Eliminar "${file.name}"?\n\nSe quitara del manifest al publicar. El iPhone dejara de verlo despues de sincronizar.`);
   if (!ok) return;
 
   setBusy(true, "Marcando eliminacion...");
-  let error = null;
-  for (const member of members) {
-    const result = await supabaseClient.rpc("admin_delete_remote_content_file", { p_id: member.id });
-    if (result.error) { error = result.error; break; }
-  }
+  const { error } = await supabaseClient.rpc("admin_delete_remote_content_file", {
+    p_id: file.id,
+  });
   setBusy(false);
 
   if (error) {
@@ -1309,21 +1604,16 @@ function editFile(file) {
   els.targetPathInput.dataset.touched = "true";
   updateAssetVariantVisibility();
   els.descriptionInput.value = cleanDescription(file.description);
+  els.requiresKeyInput.checked = file.requires_key !== false;
+  els.priceUSDInput.value = Number(file.price_usd || 15).toFixed(2);
   els.descriptionInput.dataset.thumbnailPath = thumbnailMarkerFromDescription(file.description);
+  document.querySelector("#securePatchUpload").checked = true;
   els.importedPackageInput.checked = String(file.file_name || "").toLowerCase().endsWith(".3105")
     || String(file.mime_type || "").toLowerCase() === "application/vnd.greeg.3105";
-  const groupMembers = file.combined_group_id
-    ? state.files.filter((item) => item.combined_group_id === file.combined_group_id)
-      .sort((left, right) => Number(left.combined_order || 0) - Number(right.combined_order || 0))
-    : [];
-  els.combinedPatchInput.checked = groupMembers.length > 1;
-  els.combinedPathOneInput.value = groupMembers[0]?.target_path || "";
-  els.combinedPathTwoInput.value = groupMembers[1]?.target_path || "";
   els.fileInput.value = "";
   els.thumbnailInput.value = "";
   els.textContentInput.value = file.text_content || "";
   updateCategoryTypeUI();
-  updateCombinedPatchMode();
   els.saveButton.textContent = "Reemplazar archivo";
   els.nameInput.focus();
 }
@@ -1336,15 +1626,14 @@ function resetForm() {
   delete els.targetPathInput.dataset.touched;
   els.categoryInput.value = "files";
   els.importedPackageInput.checked = false;
-  els.combinedPatchInput.checked = false;
-  els.combinedPathOneInput.value = "";
-  els.combinedPathTwoInput.value = "";
+  document.querySelector("#securePatchUpload").checked = true;
+  els.requiresKeyInput.checked = true;
+  els.priceUSDInput.value = "15.00";
   els.textContentInput.value = "";
   delete els.descriptionInput.dataset.thumbnailPath;
   els.targetBundleInput.value = DEFAULT_TARGET_BUNDLE;
   els.targetPathInput.value = "";
   updateCategoryTypeUI();
-  updateCombinedPatchMode();
   updateAssetVariantVisibility();
   els.saveButton.textContent = "Crear patch nuevo";
   setStatus("Modo nuevo: se creara otro patch, no se reemplazara uno publicado.");
@@ -1493,10 +1782,9 @@ function renderFiles() {
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(query));
   });
-  const displayFiles = dedupeAdminGroups(matchedFiles);
-  const activeFiles = displayFiles.filter(isManifestFile);
+  const activeFiles = matchedFiles.filter(isManifestFile);
   const activeIds = new Set(activeFiles.map((file) => file.id));
-  const archivedFiles = displayFiles.filter((file) => !activeIds.has(file.id));
+  const archivedFiles = matchedFiles.filter((file) => !activeIds.has(file.id));
 
   els.fileList.replaceChildren();
   els.archivedFileList.replaceChildren();
@@ -1521,13 +1809,60 @@ function renderFiles() {
   }
 }
 
+function renderAppKeys() {
+  const list = document.querySelector("#appKeyList");
+  const counter = document.querySelector("#appKeyCounter");
+  const query = document.querySelector("#appKeySearchInput")?.value.trim().toLowerCase() || "";
+  if (!list || !counter) return;
+  const licenses = appKeysOf().filter(license => !query ||
+    [license.license_key, license.label, license.status, license.device_id, license.device_model]
+      .filter(Boolean).some(value => String(value).toLowerCase().includes(query)));
+  counter.textContent = licenses.length + (licenses.length === 1 ? " key normal" : " keys normales");
+  list.replaceChildren();
+  if (!licenses.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No hay keys normales para mostrar.";
+    list.append(empty);
+    return;
+  }
+  for (const license of licenses) {
+    const node = els.keyTemplate.content.firstElementChild.cloneNode(true);
+    node.querySelector("h3").textContent = license.license_key;
+    node.querySelector(".fileMeta").textContent = [
+      "Key normal de la app",
+      "Estado: " + licenseStatusLabel(license),
+      license.label ? "Nota: " + license.label : null,
+      license.expires_at ? "Expira: " + formatDate(license.expires_at) : "Sin expiración"
+    ].filter(Boolean).join(" / ");
+    node.querySelector(".filePath").textContent =
+      "Dispositivo: " + (license.device_model || "No activado") +
+      " · Última actividad: " + formatDate(license.last_checked_at || license.used_at);
+    node.querySelector(".fileHash").textContent = "Device ID: " + (license.device_id || "Sin vincular");
+    const badge = node.querySelector(".badge");
+    badge.textContent = licenseStatusLabel(license);
+    badge.classList.toggle("inactive", !["available", "active"].includes(license.status));
+    badge.classList.toggle("pending", license.status === "available");
+    const reset = node.querySelector(".resetDeviceButton");
+    reset.disabled = !license.device_id || state.busy;
+    reset.addEventListener("click", () => resetLicenseDevice(license));
+    list.append(node);
+  }
+}
+
 function renderKeys() {
   if (!els.keyList) return;
   const query = els.keySearchInput.value.trim().toLowerCase();
+  const categoryFilter = document.querySelector("#keyCategoryFilter")?.value || "";
   const licenses = state.licenses.filter((license) => {
+    const capabilities = Array.isArray(license.capabilities) ? license.capabilities : [];
+    const categoryIDs = capabilities.filter(capability => typeof capability === "string" && capability.startsWith("category:")).map(capability => capability.slice(9));
+    if (!categoryIDs.length) return false;
+    if (categoryFilter && !categoryIDs.includes(categoryFilter)) return false;
     if (!query) return true;
     return [
       license.license_key,
+      ...(Array.isArray(license.capabilities) ? license.capabilities : []),
       license.status,
       license.label,
       license.device_id,
@@ -1555,7 +1890,9 @@ function renderKeys() {
   for (const license of licenses) {
     const node = els.keyTemplate.content.firstElementChild.cloneNode(true);
     node.querySelector("h3").textContent = license.license_key;
+    const categoryIDs = (Array.isArray(license.capabilities) ? license.capabilities : []).filter(v => typeof v === "string" && v.startsWith("category:")).map(v => v.slice(9));
     node.querySelector(".fileMeta").textContent = [
+      categoryIDs.length ? `Categoría: ${categoryIDs.map(id => categoryPath(id, allCategoryChoices())).join(", ")}` : "Tipo: key antigua / general",
       `Estado: ${licenseStatusLabel(license)}`,
       license.label ? `Nota: ${license.label}` : null,
       license.expires_at ? `Expira: ${formatDate(license.expires_at)}` : "Sin expiracion",
@@ -1588,9 +1925,7 @@ function renderKeys() {
 function renderFileCard(file) {
   const node = els.fileTemplate.content.firstElementChild.cloneNode(true);
   node.dataset.fileId = file.id;
-  node.querySelector("h3").textContent = file.combined_group_id
-    ? `${file.combined_group_name || file.name} (2 archivos combinados)`
-    : file.name;
+  node.querySelector("h3").textContent = file.name;
   node.querySelector(".fileMeta").textContent = [
     categoryPath(file.category || "files", allCategoryChoices()),
     file.content_type === "text" ? "Texto" : (String(file.file_name || "").toLowerCase().endsWith(".3105") ? "Paquete .3105" : "Patch"),
@@ -1598,9 +1933,9 @@ function renderFileCard(file) {
     file.target_bundle || DEFAULT_TARGET_BUNDLE,
     file.file_name,
     formatBytes(file.byte_size),
+    file.requires_key === false ? "Acceso no restringido por archivo" : `${Number(file.price_usd || 15).toFixed(2)} · acceso por categoría`,
   ].join(" / ");
-  const paths = adminGroupMembers(file).map((member) => member.target_path || fallbackTargetPath(member));
-  node.querySelector(".filePath").textContent = `Ruta${paths.length > 1 ? "s" : ""}: ${paths.join(" + ")}`;
+  node.querySelector(".filePath").textContent = `Ruta: ${file.target_path || fallbackTargetPath(file)}`;
   node.querySelector(".fileHash").textContent = file.sha256;
   const badge = node.querySelector(".badge");
   badge.textContent = badgeLabel(file);
@@ -1613,21 +1948,6 @@ function renderFileCard(file) {
   node.querySelector(".replaceButton").addEventListener("click", () => editFile(file));
   node.querySelector(".deleteButton").addEventListener("click", () => deleteFile(file));
   return node;
-}
-
-function adminGroupMembers(file) {
-  const groupID = file.combined_group_id || file.id;
-  return state.files.filter((item) => (item.combined_group_id || item.id) === groupID);
-}
-
-function dedupeAdminGroups(files) {
-  const seen = new Set();
-  return files.filter((file) => {
-    const key = file.combined_group_id || file.id;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function presetRules(preset) {

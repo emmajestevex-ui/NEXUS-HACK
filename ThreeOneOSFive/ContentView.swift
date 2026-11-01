@@ -166,7 +166,7 @@ private struct NexusMembershipView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(isUnlocked ? "Membresía activa" : "Sin membresía")
                                         .font(.title3.weight(.black))
-                                    Text(isUnlocked ? "Acceso verificado a NEXUS HACK" : "Activa tu key para desbloquear funciones privadas")
+                                    Text(isUnlocked ? "Acceso verificado a NEXUS" : "Activa tu key para desbloquear funciones privadas")
                                         .font(.subheadline)
                                         .foregroundStyle(NexusTheme.secondaryText)
                                 }
@@ -284,12 +284,23 @@ private struct MembershipDetailRow: View {
 private struct NexusSupportView: View {
     let socials: [NexusAppSocial]
 
+    // Canonical support invitations remain visible with old manifests.
     private var supportLinks: [NexusAppSocial] {
-        if let discord = socials.first(where: { $0.title.localizedCaseInsensitiveContains("discord") }) {
-            return [discord]
-        }
-        return [
-            NexusAppSocial(title: "Discord", subtitle: "Soporte y comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue")
+        [
+            NexusAppSocial(
+                title: "Discord de la app",
+                subtitle: "Soporte oficial y ayuda de NEXUS",
+                url: "https://discord.gg/tz87yCBgq",
+                icon: "bubble.left.and.bubble.right.fill",
+                color: "blue"
+            ),
+            NexusAppSocial(
+                title: "Discord de la comunidad",
+                subtitle: "Comunidad NEXUS",
+                url: "https://discord.gg/9NUBpqNGQ",
+                icon: "person.3.fill",
+                color: "blue"
+            )
         ]
     }
 
@@ -303,7 +314,7 @@ private struct NexusSupportView: View {
                             .foregroundStyle(.white)
                         Text("Centro de soporte")
                             .font(.largeTitle.weight(.black))
-                        Text("Ayuda, anuncios y comunidad NEXUS HACK")
+                        Text("Ayuda, anuncios y comunidad NEXUS")
                             .font(.subheadline)
                             .foregroundStyle(NexusTheme.secondaryText)
                             .multilineTextAlignment(.center)
@@ -479,7 +490,16 @@ private struct NexusMoreTabsSheet: View {
 
 private struct NexusCategoryTabView: View {
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
+    @EnvironmentObject private var patchProjectStore: PatchProjectStore
+    @Environment(\.appLanguage) private var language
     let category: NexusAppCategory
+    @State private var showCategoryUnlock = false
+    @State private var unlockedInThisView = false
+
+    private var categoryLocked: Bool {
+        category.contentType == "patch" && category.requiresKey &&
+        !unlockedInThisView && !ContentLicenseStore.hasAccess(category: category.id)
+    }
 
     private var childCategories: [NexusAppCategory] {
         remoteContentStore.appContent.categories
@@ -503,7 +523,7 @@ private struct NexusCategoryTabView: View {
                             NexusRemoteArtwork(systemName: category.icon, iconURL: category.iconURL, tint: nexusCategoryColor(category.color), size: 48)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(category.title).font(.title3.weight(.black))
-                                Text(category.subtitle.isEmpty ? "Contenido remoto de NEXUS HACK" : category.subtitle)
+                                Text(category.subtitle.isEmpty ? "Contenido remoto de NEXUS" : category.subtitle)
                                     .font(.subheadline).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -563,11 +583,48 @@ private struct NexusCategoryTabView: View {
                             .nexusEntrance(index: 1)
                         }
                     } else {
-                        ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
-                            GreegPanel {
-                                RemoteFileMiniRow(file: file, tint: AppTheme.accent)
+                        ZStack {
+                            VStack(spacing: 10) {
+                                ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
+                                    GreegPanel {
+                                        RemoteFileMiniRow(file: file, tint: AppTheme.accent)
+                                    }
+                                    .nexusEntrance(index: index + (childCategories.isEmpty ? 1 : 2))
+                                }
                             }
-                            .nexusEntrance(index: index + (childCategories.isEmpty ? 1 : 2))
+                            .blur(radius: categoryLocked ? 7 : 0)
+                            .opacity(categoryLocked ? 0.64 : 1)
+                            .allowsHitTesting(!categoryLocked)
+                            if categoryLocked {
+                                GreegPanel {
+                                    VStack(spacing: 12) {
+                                        Image(systemName: "lock.shield.fill")
+                                            .font(.system(size: 31))
+                                            .foregroundStyle(NexusTheme.blueBright)
+                                        Text("Categoría protegida")
+                                            .font(.headline.weight(.black))
+                                        Text("Puedes ver sus patches, pero necesitas una key válida para utilizarlos.")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                            .multilineTextAlignment(.center)
+                                        Button("Introducir key de esta categoría") {
+                                            showCategoryUnlock = true
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(NexusTheme.blue)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(14)
+                                }
+                                .padding(.horizontal, 5)
+                            }
+                        }
+                        .sheet(isPresented: $showCategoryUnlock) {
+                            if let firstFile = files.first {
+                                ContentKeyUnlockView(file: firstFile) {
+                                    unlockedInThisView = true
+                                    remoteContentStore.syncIfPossible(force: true)
+                                }
+                            }
                         }
                     }
                 }
@@ -578,6 +635,14 @@ private struct NexusCategoryTabView: View {
             .background(NexusBackground { Color.clear }.ignoresSafeArea())
             .navigationTitle(category.title)
             .navigationBarTitleDisplayMode(.inline)
+            .patchStorePresentation(patchProjectStore)
+            .alert(item: $patchProjectStore.alert) { message in
+                Alert(
+                    title: Text(language.text(message.titleKey)),
+                    message: Text(message.message(language: language)),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
         }
     }
 }
@@ -656,6 +721,7 @@ private struct GreegHomeView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var remoteContentStore: RemoteContentStore
     @EnvironmentObject private var store: PatchProjectStore
+    @Environment(\.appLanguage) private var language
     @AppStorage("greeg.license.supabaseUnlocked") private var isUnlocked = false
     let onSignOut: () -> Void
     let onOpenMembership: () -> Void
@@ -663,6 +729,7 @@ private struct GreegHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var logoIsBreathing = false
     @State private var heroRingRotation = 0.0
+    @State private var showingAnnouncementDetail = false
 
     var body: some View {
         NavigationStack {
@@ -712,6 +779,14 @@ private struct GreegHomeView: View {
             .onChange(of: remoteContentStore.remoteVersion) { _ in
                 store.reload()
             }
+            .patchStorePresentation(store)
+            .alert(item: $store.alert) { message in
+                Alert(
+                    title: Text(language.text(message.titleKey)),
+                    message: Text(message.message(language: language)),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
         }
     }
 
@@ -736,7 +811,7 @@ private struct GreegHomeView: View {
                     .frame(width: 58, height: 58)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("NEXUS HACK")
+                        Text("NEXUS")
                             .font(.system(size: 24, weight: .black, design: .rounded))
                             .lineLimit(1)
                             .minimumScaleFactor(0.68)
@@ -925,21 +1000,46 @@ private struct GreegHomeView: View {
     private var displaySocials: [NexusAppSocial] {
         if !remoteContentStore.appContent.socials.isEmpty { return remoteContentStore.appContent.socials }
         return [
-            NexusAppSocial(title: "Discord", subtitle: "Comunidad NEXUS HACK", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue"),
+            NexusAppSocial(title: "Discord", subtitle: "Comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue"),
             NexusAppSocial(title: "TikTok", subtitle: "@tumbado_sensi7", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black")
         ]
     }
 
     private func announcementCard(_ announcement: NexusAppAnnouncement) -> some View {
-        GreegPanel {
-            HStack(alignment: .top, spacing: 12) {
-                AppRowIcon(systemName: announcement.icon, tint: themeColor(announcement.color), symbolSize: 17, frameSize: 42)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(announcement.title).font(.headline.weight(.bold))
-                    Text(announcement.body).font(.subheadline).foregroundStyle(.secondary)
+        Button {
+            showingAnnouncementDetail = true
+        } label: {
+            GreegPanel {
+                HStack(alignment: .top, spacing: 12) {
+                    AppRowIcon(systemName: announcement.icon, tint: themeColor(announcement.color), symbolSize: 17, frameSize: 42)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(announcement.title).font(.headline.weight(.bold))
+                        Text(announcement.body)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
+                        Text("Toca para leer el anuncio completo")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(NexusTheme.blueBright)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(NexusTheme.blueBright)
                 }
-                Spacer(minLength: 0)
             }
+        }
+        .buttonStyle(NexusPressStyle())
+        .accessibilityLabel("Leer anuncio completo: \(announcement.title)")
+        .fullScreenCover(isPresented: $showingAnnouncementDetail) {
+            NexusFullTextDetailView(
+                title: announcement.title,
+                bodyText: announcement.body,
+                section: "Anuncio de NEXUS",
+                icon: announcement.icon,
+                tint: themeColor(announcement.color)
+            )
         }
     }
 
@@ -1064,60 +1164,152 @@ private struct RemoteSocialRow: View {
     }
 }
 
+/// Reader shared by announcements and tutorials. It preserves the complete
+/// published text, including paragraphs, instead of restricting it to a card preview.
+private struct NexusFullTextDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    let bodyText: String
+    let section: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    GreegPanel {
+                        HStack(alignment: .top, spacing: 12) {
+                            NexusIconTile(systemName: icon, tint: tint, size: 48)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(section.uppercased())
+                                    .font(.caption.weight(.black))
+                                    .foregroundStyle(tint)
+                                    .tracking(1)
+                                Text(title)
+                                    .font(.title2.weight(.bold))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    GreegPanel {
+                        Text(bodyText.isEmpty ? "No hay contenido publicado." : bodyText)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .lineSpacing(7)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 40)
+            }
+            .background(NexusBackground { Color.clear }.ignoresSafeArea())
+            .navigationTitle("Lectura completa")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cerrar") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// The build pipeline injects the password from GitHub Actions Secrets.
+// Never put the actual .3105 password in this public repository.
+enum NexusPackageAutomaticPassword {
+    static let value = "__NEXUS_3105_PASSWORD_PLACEHOLDER__"
+}
+
 private struct RemoteFileMiniRow: View {
+    @EnvironmentObject private var remoteContentStore: RemoteContentStore
+    @EnvironmentObject private var patchProjectStore: PatchProjectStore
     @State private var isWorking = false
     @State private var actionAlert: GreegPatchActionAlert?
-    @EnvironmentObject private var remoteContentStore: RemoteContentStore
+    @State private var showKeySheet = false
+    @State private var showingFullText = false
+    @State private var packageProjectID: UUID?
     let file: RemoteContentFile
     let tint: Color
 
     private var projectID: UUID? {
-        UUID(uuidString: file.patchGroupID)
+        UUID(uuidString: file.id)
     }
 
-    private var patchFiles: [RemoteContentFile] {
-        let files = remoteContentStore.files(for: file)
-        return files.isEmpty ? [file] : files
+    private var activeProjectID: UUID? {
+        isExportedPackage ? packageProjectID : projectID
     }
 
     private var isApplied: Bool {
-        guard let projectID else { return false }
-        return DevicePatchService.latestReceipt(projectID: projectID) != nil
+        guard let activeProjectID else { return false }
+        return DevicePatchService.latestReceipt(projectID: activeProjectID) != nil
     }
 
-    var body: some View {
+    private var hasFileAccess: Bool {
+        !remoteContentStore.requiresKey(for: file) || ContentLicenseStore.hasAccess(category: file.category)
+    }
+
+    private var isExportedPackage: Bool {
+        file.fileName.lowercased().hasSuffix(".3105")
+          || file.mimeType?.lowercased() == "application/vnd.greeg.3105"
+    }
+
+    private var readableText: String {
+        let fullText = file.textContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !fullText.isEmpty { return fullText }
+        let description = file.description?.nexusCleanDescription.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return description.isEmpty ? "Este tutorial todavía no tiene texto publicado." : description
+    }
+
+    // The whole tutorial card is tappable. Patch actions stay independent.
+    private var rowContent: some View {
         HStack(spacing: 12) {
             RemoteFileArtwork(file: file, tint: tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(file.combinedGroupName ?? file.name).font(.headline.weight(.bold)).lineLimit(1)
-                if file.isCombinedPatch {
-                    Text("Patch combinado · " + String(patchFiles.count) + " archivos")
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(file.name)
+                    .font(.headline.weight(.bold))
+                    .lineLimit(file.isTextContent ? 2 : 1)
+                    .multilineTextAlignment(.leading)
+
+                Text(file.isTextContent
+                     ? readableText
+                     : (file.description?.nexusCleanDescription ?? "Disponible después de sincronizar"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                if file.isTextContent {
+                    Label("Leer tutorial completo", systemImage: "book.pages.fill")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(tint)
-                        .lineLimit(1)
-                }
-                if file.isTextContent, let textContent = file.textContent?.trimmingCharacters(in: .whitespacesAndNewlines), !textContent.isEmpty {
-                    Text(textContent)
-                        .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
-                } else {
-                    Text(file.description?.nexusCleanDescription ?? "Disponible después de sincronizar")
-                        .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                        .foregroundStyle(NexusTheme.blueBright)
                 }
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             if file.isTextContent {
-                Image(systemName: "doc.text.fill")
-                    .foregroundStyle(tint)
+                Image(systemName: "chevron.right")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(NexusTheme.blueBright)
+                    .frame(width: 26, height: 44)
+                    .accessibilityHidden(true)
             } else {
-                Button(action: togglePatch) {
+                Button(action: { hasFileAccess ? togglePatch() : (showKeySheet = true) }) {
                     HStack(spacing: 5) {
                         if isWorking {
                             ProgressView()
                                 .tint(.white)
                         } else {
-                            Image(systemName: isApplied ? "arrow.uturn.backward.circle.fill" : "checkmark.circle.fill")
+                            Image(systemName: hasFileAccess
+                                  ? (isApplied ? "arrow.uturn.backward.circle.fill" : "checkmark.circle.fill")
+                                  : "lock.fill")
                         }
-                        Text(isApplied ? "Original" : "Aplicar")
+                        Text(hasFileAccess ? (isApplied ? "Original" : "Aplicar") : "Desbloquear")
                     }
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.white)
@@ -1131,7 +1323,46 @@ private struct RemoteFileMiniRow: View {
                 .disabled(isWorking)
             }
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    var body: some View {
+        Group {
+            if file.isTextContent {
+                Button {
+                    showingFullText = true
+                } label: {
+                    rowContent
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Leer tutorial completo: \(file.name)")
+                .accessibilityHint("Abre el texto completo en una pantalla de lectura")
+            } else {
+                rowContent
+            }
+        }
+        .fullScreenCover(isPresented: $showingFullText) {
+            NexusFullTextDetailView(
+                title: file.name,
+                bodyText: readableText,
+                section: "Tutorial de NEXUS",
+                icon: "doc.text.fill",
+                tint: tint
+            )
+        }
+        .sheet(isPresented: $showKeySheet) {
+            ContentKeyUnlockView(file: file) {
+                remoteContentStore.syncIfPossible(force: true)
+            }
+        }
+        .task(id: file.sha256) {
+            guard isExportedPackage,
+                  let url = RemoteContentLibrary.localFileURL(for: file),
+                  let data = try? Data(contentsOf: url),
+                  let summary = try? PatchPackageCodec.inspect(data) else { return }
+            packageProjectID = summary.packageID
+        }
         .alert(item: $actionAlert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -1141,9 +1372,72 @@ private struct RemoteFileMiniRow: View {
         }
     }
 
+    /// One-tap apply: decode the entire exported project in the background
+    /// and use the internal rule targets. Never write raw .3105 bytes into
+    /// a single assetindexer path.
+    private func applyExportedPackage() {
+        guard let localURL = RemoteContentLibrary.localFileURL(for: file) else {
+            actionAlert = GreegPatchActionAlert(
+                title: "Sincroniza el archivo",
+                message: "El paquete todavía no está descargado. Pulsa Sincronizar."
+            )
+            return
+        }
+        isWorking = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                let data = try Data(contentsOf: localURL)
+                let summary = try PatchPackageCodec.inspect(data)
+                let decoded: DecodedPatchPackage
+                if let storedKey = try PatchKeyStore.load(for: summary) {
+                    // Already unlocked on this same device. No password needed.
+                    decoded = try PatchPackageCodec.decode(data, contentKey: storedKey)
+                } else if summary.isPasswordProtected {
+                    // The original .3105 stays password-protected for other
+                    // importers; NEXUS unlocks it only after category access.
+                    decoded = try PatchPackageCodec.decode(
+                        data, password: NexusPackageAutomaticPassword.value
+                    )
+                    try PatchKeyStore.store(decoded.contentKey, for: summary)
+                } else {
+                    decoded = try PatchPackageCodec.decode(data, password: nil)
+                }
+                _ = try DevicePatchService.applyReplacingConflicts(project: decoded.project)
+                await MainActor.run {
+                    isWorking = false
+                    packageProjectID = decoded.project.id
+                    NexusHaptics.notification(.success)
+                    NexusAudioPlayer.shared.play(named: "nexus_apply")
+                    actionAlert = GreegPatchActionAlert(
+                        title: "Patch aplicado",
+                        message: "Patch activado. Pulsa Original cuando quieras restaurar."
+                    )
+                }
+            } catch let error as PatchPackageError {
+                await MainActor.run {
+                    isWorking = false
+                    actionAlert = GreegPatchActionAlert(
+                        title: "No se pudo aplicar",
+                        message: remotePatchErrorMessage(error)
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    isWorking = false
+                    actionAlert = GreegPatchActionAlert(
+                        title: "No se pudo aplicar",
+                        message: error.localizedDescription
+                    )
+                }
+            }
+        }
+    }
+
     private func togglePatch() {
         if isApplied {
             restore()
+        } else if isExportedPackage {
+            applyExportedPackage()
         } else {
             apply()
         }
@@ -1154,52 +1448,38 @@ private struct RemoteFileMiniRow: View {
             actionAlert = GreegPatchActionAlert(title: "No se pudo aplicar", message: "Este archivo remoto no tiene un identificador válido.")
             return
         }
-        var rules: [PatchRule] = []
-        var bundleIDs: [String] = []
-        for patchFile in patchFiles.sorted(by: {
-            $0.combinedOrder == $1.combinedOrder
-                ? $0.fileName.localizedCaseInsensitiveCompare($1.fileName) == .orderedAscending
-                : $0.combinedOrder < $1.combinedOrder
-        }) {
-            guard let targetPath = patchFile.targetPath?.trimmingCharacters(in: .whitespacesAndNewlines), !targetPath.isEmpty else {
-                actionAlert = GreegPatchActionAlert(title: "Ruta faltante", message: "Uno de los archivos del patch no tiene una ruta de destino configurada.")
-                return
-            }
-            guard let localURL = RemoteContentLibrary.localFileURL(for: patchFile),
-                  let replacementData = try? Data(contentsOf: localURL) else {
-                actionAlert = GreegPatchActionAlert(title: "Sincroniza primero", message: "Pulsa Sincronizar para descargar todos los archivos de este patch.")
-                return
-            }
-            bundleIDs.append(patchFile.targetBundleID)
-            rules.append(PatchRule(
-                bundleID: patchFile.targetBundleID,
-                relativePath: targetPath,
-                replacementFilename: patchFile.fileName,
-                replacementData: replacementData
-            ))
+        guard let targetPath = file.targetPath?.trimmingCharacters(in: .whitespacesAndNewlines), !targetPath.isEmpty else {
+            actionAlert = GreegPatchActionAlert(title: "Ruta faltante", message: "Este patch no tiene una ruta de destino configurada.")
+            return
+        }
+        guard let localURL = RemoteContentLibrary.localFileURL(for: file),
+              let replacementData = try? Data(contentsOf: localURL) else {
+            actionAlert = GreegPatchActionAlert(title: "Sincroniza primero", message: "Pulsa Sincronizar para descargar este patch antes de aplicarlo.")
+            return
         }
 
-        let uniqueBundleIDs = bundleIDs.reduce(into: [String]()) { result, bundleID in
-            if !result.contains(bundleID) { result.append(bundleID) }
-        }
         let project = PatchProject(
             id: projectID,
-            name: file.combinedGroupName ?? file.name,
-            author: "NEXUS HACK [REMOTE]",
-            bundleIdentifiers: uniqueBundleIDs,
-            rules: rules
+            name: file.name,
+            author: "NEXUS [REMOTE]",
+            bundleIdentifiers: [file.targetBundleID],
+            rules: [PatchRule(
+                bundleID: file.targetBundleID,
+                relativePath: targetPath,
+                replacementFilename: file.fileName,
+                replacementData: replacementData
+            )]
         )
-        let ruleCount = rules.count
 
         isWorking = true
         Task.detached(priority: .userInitiated) {
             do {
-                _ = try DevicePatchService.apply(project: project)
+                _ = try DevicePatchService.applyReplacingConflicts(project: project)
                 await MainActor.run {
                     isWorking = false
                     NexusHaptics.notification(.success)
                     NexusAudioPlayer.shared.play(named: "nexus_apply")
-                    actionAlert = GreegPatchActionAlert(title: "Patch aplicado", message: "Los " + String(ruleCount) + " archivos del patch están activos. Pulsa Original para restaurarlos.")
+                    actionAlert = GreegPatchActionAlert(title: "Patch aplicado", message: "El patch está activo. Pulsa Original para restaurar el archivo anterior.")
                 }
             } catch let error as PatchPackageError {
                 await MainActor.run {
@@ -1216,17 +1496,17 @@ private struct RemoteFileMiniRow: View {
     }
 
     private func restore() {
-        guard let projectID,
-              let receipt = DevicePatchService.latestReceipt(projectID: projectID) else { return }
+        guard let activeProjectID,
+              let receipt = DevicePatchService.latestReceipt(projectID: activeProjectID) else { return }
         isWorking = true
         Task.detached(priority: .userInitiated) {
             do {
-                try DevicePatchService.restore(receipt: receipt, allowChangedTargets: true)
+                try DevicePatchService.restore(receipt: receipt, allowChangedTargets: false)
                 await MainActor.run {
                     isWorking = false
                     NexusHaptics.notification(.success)
                     NexusAudioPlayer.shared.play(named: "nexus_original")
-                    actionAlert = GreegPatchActionAlert(title: "Original restaurado", message: "Los archivos volvieron a su estado original.")
+                    actionAlert = GreegPatchActionAlert(title: "Original restaurado", message: "El archivo volvió a su estado original.")
                 }
             } catch let error as PatchPackageError {
                 await MainActor.run {
@@ -1243,14 +1523,80 @@ private struct RemoteFileMiniRow: View {
     }
 }
 
+private struct ContentKeyUnlockView: View {
+    @Environment(\.dismiss) private var dismiss
+    let file: RemoteContentFile
+    let onUnlocked: () -> Void
+    @State private var key = ""
+    @State private var message = ""
+    @State private var isLoading = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Categoría: \(file.category)").font(.headline)
+                    Text("La key desbloquea todos los patches de esta categoría. Precio de referencia: $\(file.priceUSD, specifier: "%.2f") USD.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Section("Key de categoría") {
+                    SecureField("NEXUS-XXXX-XXXX", text: $key)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                    if !message.isEmpty {
+                        Text(message).font(.footnote).foregroundStyle(.red)
+                    }
+                    Button {
+                        unlock()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isLoading { ProgressView() } else { Text("Desbloquear categoría") }
+                            Spacer()
+                        }
+                    }
+                    .disabled(isLoading || key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .navigationTitle("Contenido protegido")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func unlock() {
+        isLoading = true
+        message = ""
+        Task {
+            do {
+                _ = try await ContentLicenseStore.activate(key: key, fileID: file.id, category: file.category)
+                await MainActor.run {
+                    onUnlocked()
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run { message = error.localizedDescription }
+            }
+            await MainActor.run { isLoading = false }
+        }
+    }
+}
+
 private func remotePatchErrorMessage(_ error: PatchPackageError) -> String {
     switch error {
     case .targetAppUnavailable(let bundleID):
         return "La app destino no está instalada o no se puede abrir: \(bundleID)."
     case .projectAlreadyApplied:
         return "Este patch ya está activo. Pulsa Original para volver atrás."
-    case .targetOccupied(let path):
-        return "El destino ya está ocupado por otro patch: \(path)."
+    case .targetOccupied:
+        return "Hay otro patch en esa ubicación y no se pudo cerrar su operación anterior. No se sobrescribió ningún archivo."
+    case .restoreTargetsChanged:
+        return "El archivo activo cambió fuera de NEXUS. Por seguridad, no se sobrescribió; restaura o revisa ese patch antes de continuar."
     default:
         return error.localizedDescription
     }
@@ -1487,7 +1833,7 @@ private struct GreegPatchLibraryView: View {
             HStack(spacing: 12) {
                 AppLogo(size: 40)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Centro NEXUS HACK")
+                    Text("Centro NEXUS")
                         .font(.headline.weight(.black))
                     Text("\(visibleItems.count) archivos privados")
                         .font(.caption.weight(.semibold))
@@ -1792,7 +2138,7 @@ private struct GreegPatchRow: View {
                         )
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(project?.name ?? "Archivo NEXUS HACK")
+                            Text(project?.name ?? "Archivo NEXUS")
                                 .font(.headline.weight(.black))
                                 .foregroundStyle(.white)
                                 .lineLimit(2)
@@ -1827,7 +2173,7 @@ private struct GreegPatchRow: View {
     }
 
     private var iconName: String {
-        let name = (project?.name ?? "Archivo NEXUS HACK").lowercased()
+        let name = (project?.name ?? "Archivo NEXUS").lowercased()
         if name.contains("cuello") {
             return "link.circle.fill"
         }
@@ -1853,7 +2199,7 @@ private struct GreegPatchRow: View {
                 let project = item.summary.schemaVersion >= 2 && item.canInspectContents
                     ? try PatchProjectLibrary.synchronizeWorkspace(item: item)
                     : itemProject
-                _ = try DevicePatchService.apply(project: project)
+                _ = try DevicePatchService.applyReplacingConflicts(project: project)
                 await MainActor.run {
                     store.reload()
                     isWorking = false
@@ -1966,7 +2312,7 @@ private struct GreegPatchDetailView: View {
                 HStack(spacing: 14) {
                     AppRowIcon(systemName: kind.iconName, tint: kind.tint, symbolSize: 16, frameSize: 40)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(project?.name ?? "Archivo NEXUS HACK")
+                        Text(project?.name ?? "Archivo NEXUS")
                             .font(.system(size: 24, weight: .black, design: .rounded))
                             .lineLimit(2)
                             .minimumScaleFactor(0.75)
@@ -2044,7 +2390,7 @@ private struct GreegPatchDetailView: View {
                 let project = item.summary.schemaVersion >= 2 && item.canInspectContents
                     ? try PatchProjectLibrary.synchronizeWorkspace(item: item)
                     : baseProject
-                _ = try DevicePatchService.apply(project: project)
+                _ = try DevicePatchService.applyReplacingConflicts(project: project)
                 await MainActor.run {
                     store.reload()
                     isWorking = false

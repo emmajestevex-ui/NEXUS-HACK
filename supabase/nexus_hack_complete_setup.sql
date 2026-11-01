@@ -906,9 +906,6 @@ create table if not exists public.remote_content_files (
     category text not null default 'files',
     content_type text not null default 'patch',
     text_content text,
-    combined_group_id text,
-    combined_group_name text,
-    combined_order integer not null default 0,
     target_bundle text not null default 'com.dts.freefireth',
     target_path text not null,
     version integer not null default 1,
@@ -933,10 +930,7 @@ create table if not exists public.remote_content_files (
 
 alter table public.remote_content_files
     add column if not exists content_type text not null default 'patch',
-    add column if not exists text_content text,
-    add column if not exists combined_group_id text,
-    add column if not exists combined_group_name text,
-    add column if not exists combined_order integer not null default 0;
+    add column if not exists text_content text;
 
 update public.remote_content_files
 set content_type = case
@@ -1035,9 +1029,6 @@ on public.remote_content_files (slug);
 
 create index if not exists remote_content_files_active_idx
 on public.remote_content_files (is_active, deleted_at);
-
-create index if not exists remote_content_files_combined_group_idx
-on public.remote_content_files (combined_group_id, combined_order);
 
 create index if not exists remote_content_releases_version_idx
 on public.remote_content_releases (version desc);
@@ -1212,9 +1203,6 @@ returns table (
     category text,
     content_type text,
     text_content text,
-    combined_group_id text,
-    combined_group_name text,
-    combined_order integer,
     target_bundle text,
     target_path text,
     version integer,
@@ -1249,9 +1237,6 @@ begin
         f.category,
         f.content_type,
         f.text_content,
-        f.combined_group_id,
-        f.combined_group_name,
-        f.combined_order,
         f.target_bundle,
         f.target_path,
         f.version,
@@ -1282,7 +1267,6 @@ drop function if exists public.admin_upsert_remote_content_file(text, text, text
 drop function if exists public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid);
 drop function if exists public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean);
 drop function if exists public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text);
-drop function if exists public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text, text, text, integer);
 
 create or replace function public.admin_upsert_remote_content_file(
     p_name text,
@@ -1299,10 +1283,7 @@ create or replace function public.admin_upsert_remote_content_file(
     p_id uuid default null,
     p_force_new boolean default false,
     p_content_type text default 'patch',
-    p_text_content text default null,
-    p_combined_group_id text default null,
-    p_combined_group_name text default null,
-    p_combined_order integer default 0
+    p_text_content text default null
 )
 returns jsonb
 language plpgsql
@@ -1319,9 +1300,6 @@ declare
     v_mime_type text := nullif(trim(coalesce(p_mime_type, '')), '');
     v_content_type text := case when lower(trim(coalesce(p_content_type, 'patch'))) = 'text' then 'text' else 'patch' end;
     v_text_content text := nullif(trim(coalesce(p_text_content, '')), '');
-    v_combined_group_id text := nullif(trim(coalesce(p_combined_group_id, '')), '');
-    v_combined_group_name text := nullif(trim(coalesce(p_combined_group_name, '')), '');
-    v_combined_order integer := greatest(0, coalesce(p_combined_order, 0));
     v_storage_path text := trim(coalesce(p_storage_path, ''));
     v_sha text := lower(trim(coalesce(p_sha256, '')));
     v_file public.remote_content_files%rowtype;
@@ -1381,9 +1359,6 @@ begin
             category = v_category,
             content_type = v_content_type,
             text_content = v_text_content,
-            combined_group_id = v_combined_group_id,
-            combined_group_name = v_combined_group_name,
-            combined_order = v_combined_order,
             target_bundle = v_target_bundle,
             target_path = v_target_path,
             version = v_file.version + 1,
@@ -1417,9 +1392,6 @@ begin
             category,
             content_type,
             text_content,
-            combined_group_id,
-            combined_group_name,
-            combined_order,
             target_bundle,
             target_path,
             version,
@@ -1438,9 +1410,6 @@ begin
             v_category,
             v_content_type,
             v_text_content,
-            v_combined_group_id,
-            v_combined_group_name,
-            v_combined_order,
             v_target_bundle,
             v_target_path,
             1,
@@ -1667,9 +1636,6 @@ begin
                 'category', f.category,
                 'content_type', f.content_type,
                 'text_content', f.text_content,
-                'combined_group_id', f.combined_group_id,
-                'combined_group_name', f.combined_group_name,
-                'combined_order', f.combined_order,
                 'target_bundle', f.target_bundle,
                 'target_path', f.target_path,
                 'version', f.version,
@@ -1786,7 +1752,7 @@ revoke all on function public.remote_content_safe_slug(text, text) from public;
 revoke all on function public.remote_content_safe_path(text, text, text) from public;
 revoke all on function public.remote_content_safe_bundle(text) from public;
 revoke all on function public.admin_list_remote_content_files() from public;
-revoke all on function public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text, text, text, integer) from public;
+revoke all on function public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text) from public;
 revoke all on function public.admin_set_remote_content_active(uuid, boolean) from public;
 revoke all on function public.admin_delete_remote_content_file(uuid) from public;
 revoke all on function public.admin_disable_remote_content_target(text, text, text, text, text, text) from public;
@@ -1795,7 +1761,7 @@ revoke all on function public.get_remote_content_manifest(text, text, text, text
 
 grant execute on function public.admin_list_remote_content_files() to authenticated;
 grant execute on function public.is_license_admin() to authenticated;
-grant execute on function public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text, text, text, integer) to authenticated;
+grant execute on function public.admin_upsert_remote_content_file(text, text, text, text, text, text, text, bigint, text, text, text, uuid, boolean, text, text) to authenticated;
 grant execute on function public.admin_set_remote_content_active(uuid, boolean) to authenticated;
 grant execute on function public.admin_delete_remote_content_file(uuid) to authenticated;
 grant execute on function public.admin_disable_remote_content_target(text, text, text, text, text, text) to authenticated;

@@ -232,10 +232,8 @@ final class PatchProjectStore: ObservableObject {
                 existingURL: item.packageURL,
                 origin: item.origin
             )
-            passwordRequest = PatchPasswordRequest(
-                summary: item.summary,
-                origin: item.origin
-            )
+            // Automatically try the configured package password.
+            unlock(password: NexusPackageAutomaticPassword.value)
         } catch let error as PatchPackageError {
             present(error)
         } catch {
@@ -371,15 +369,10 @@ final class PatchProjectStore: ObservableObject {
             return nil
         }
         if summary.isPasswordProtected {
-            guard let password else {
-                return PendingUnlock(
-                    data: data,
-                    summary: summary,
-                    existingURL: existingURL,
-                    origin: origin
-                )
-            }
-            let decoded = try PatchPackageCodec.decode(data, password: password)
+            // .3105 contents stay encrypted; NEXUS silently unlocks them.
+            let decoded = try PatchPackageCodec.decode(
+                data, password: password ?? NexusPackageAutomaticPassword.value
+            )
             try PatchKeyStore.store(decoded.contentKey, for: summary)
             do {
                 try PatchProjectLibrary.installImportedPackage(
@@ -425,13 +418,9 @@ final class PatchProjectStore: ObservableObject {
 
     private func failUnlock(_ error: PatchPackageError) {
         isBusy = false
-        // Keep the password sheet open so the user can retry.
-        // Presenting an alert while dismissing the sheet swallows the message.
-        if case .invalidPasswordOrCorruptedPackage = error {
-            unlockErrorKey = "patch.error.wrong_password"
-        } else {
-            unlockErrorKey = error.localizationKey
-        }
+        // No password sheet: show a normal error without exposing secrets.
+        clearPendingUnlock()
+        present(error)
     }
 
     private func present(_ error: PatchPackageError) {

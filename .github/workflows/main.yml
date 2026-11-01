@@ -21,6 +21,34 @@ jobs:
       - name: Mostrar schemes disponibles
         run: xcodebuild -project ThreeOneOSFive.xcodeproj -list
 
+      - name: Configurar desbloqueo automático de .3105
+        env:
+          NEXUS_3105_PASSWORD: ${{ secrets.NEXUS_3105_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NEXUS_3105_PASSWORD:-}" ]; then
+            echo "::error::Falta configurar el secreto NEXUS_3105_PASSWORD en Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          # Inject only inside the macOS runner's temporary checkout.
+          # Never commit the password or print its value in workflow logs.
+          source = Path("ThreeOneOSFive/ContentView.swift")
+          data = source.read_text(encoding="utf-8")
+          placeholder = '"__NEXUS_3105_PASSWORD_PLACEHOLDER__"'
+          if data.count(placeholder) != 1:
+              raise SystemExit("Missing or repeated .3105 password placeholder")
+          password = os.environ["NEXUS_3105_PASSWORD"]
+          if not password or len(password) > 1024:
+              raise SystemExit("Invalid .3105 secret length")
+          source.write_text(data.replace(placeholder, json.dumps(password, ensure_ascii=True)), encoding="utf-8")
+          print(".3105 automatic unlock configured without exposing the password")
+          PY
+
       - name: Compilar NEXUS HACK
         run: |
           set -o pipefail
