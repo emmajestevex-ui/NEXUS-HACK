@@ -54,6 +54,7 @@
         <button type="button" class="adminNavItem" data-admin-target="app-keys" aria-pressed="false"><span class="adminNavNumber">04</span><span><strong>Keys de la app</strong><small>Licencias normales de NEXUS</small></span></button>
         <button type="button" class="adminNavItem" data-admin-target="packages" aria-pressed="false"><span class="adminNavNumber">05</span><span><strong>Paquetes .3105</strong><small>Importar y asignar paquetes completos</small></span></button>
         <button type="button" class="adminNavItem" data-admin-target="combined" aria-pressed="false"><span class="adminNavNumber">06</span><span><strong>Patches combinados</strong><small>Dos archivos y dos rutas</small></span></button>
+        <button type="button" class="adminNavItem" data-admin-target="combined-3105" aria-pressed="false"><span class="adminNavNumber">07</span><span><strong>Combinados .3105</strong><small>Dos paquetes sin rutas</small></span></button>
       </nav>
       <section id="adminPanel" class="grid hidden">
         <aside class="panel" data-admin-view="patches">
@@ -403,7 +404,7 @@
             <div class="combinedFormGrid">
               <label>Nombre visible<input id="combinedNameInput" type="text" maxlength="80" placeholder="Ej. Pecho + Antena" required /></label>
               <label>Slug<input id="combinedSlugInput" type="text" maxlength="80" placeholder="pecho-antena" required /></label>
-              <label>Categoría<select id="combinedCategoryInput" required><option value="">Cargando categorías...</option></select><span class="fieldHint">Elige una categoría tipo patch; los contenedores no reciben archivos.</span></label>
+              <label>Categoría<select id="combinedCategoryInput" required><option value="">Cargando categorías...</option></select><span class="fieldHint">Aquí aparecen todas las categorías, incluidas las nuevas. Solo las de tipo patch pueden recibir archivos combinados.</span></label>
               <label>App destino<select id="combinedTargetBundleInput"><option value="com.dts.freefireth">Free Fire TH - com.dts.freefireth</option><option value="com.dts.freefiremax">Free Fire Max - com.dts.freefiremax</option></select></label>
               <label>Archivo 1<input id="combinedFormFileOneInput" type="file" required /></label>
               <label>Ruta del archivo 1<input id="combinedFormPathOneInput" type="text" maxlength="180" placeholder="Documents/.../archivo-1" required /></label>
@@ -417,6 +418,27 @@
             <button id="combinedSaveButton" class="primary" type="submit">Guardar patch combinado</button>
           </form>
           <p id="combinedStatusText" class="notice" role="status">Completa los dos archivos y sus rutas antes de guardar.</p>
+        </section>
+        <section class="panel fullWidth packageImporter" data-admin-view="combined-3105">
+          <div class="panelHeader">
+            <div>
+              <h2>Crear combinado .3105</h2>
+              <p class="muted">Sube dos paquetes .3105 exportados. No se piden rutas porque cada paquete ya incluye sus reglas y destinos internos.</p>
+            </div>
+            <button type="button" id="combinedPackageRefreshButton" class="ghost">Actualizar categorías</button>
+          </div>
+          <form id="combinedPackageForm" class="form combinedForm">
+            <div class="combinedFormGrid">
+              <label>Nombre visible<input id="combinedPackageNameInput" type="text" maxlength="80" placeholder="Ej. Pecho + Antena .3105" required /></label>
+              <label>Categoría<select id="combinedPackageCategoryInput" required><option value="">Cargando categorías...</option></select><span class="fieldHint">Aparecen todas las categorías. Elige una de tipo patch para guardar el combinado.</span></label>
+              <label>Paquete .3105 número 1<input id="combinedPackageFileOneInput" type="file" accept=".3105,application/octet-stream" required /><span class="fieldHint">Debe ser un paquete real exportado desde NEXUS/3105.</span></label>
+              <label>Paquete .3105 número 2<input id="combinedPackageFileTwoInput" type="file" accept=".3105,application/octet-stream" required /><span class="fieldHint">Se aplicará junto con el primer paquete.</span></label>
+              <label>Precio de referencia (USD)<input id="combinedPackagePriceInput" type="number" min="0.01" step="0.01" value="15.00" /></label>
+              <label class="checkLabel"><input id="combinedPackageEncryptInput" type="checkbox" checked />Cifrar los dos paquetes en Supabase<span class="fieldHint">Mantiene la protección segura de los paquetes normales.</span></label>
+            </div>
+            <button id="combinedPackageSaveButton" class="primary" type="submit">Guardar combinado .3105</button>
+          </form>
+          <p id="combinedPackageStatusText" class="notice" role="status">Selecciona los dos paquetes .3105 y una categoría.</p>
         </section>
       </section>
     </main>

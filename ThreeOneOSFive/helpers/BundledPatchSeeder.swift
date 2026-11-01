@@ -528,11 +528,21 @@ enum BundledPatchSeeder {
                 }
 
                 let existingItem = existingItems.first { $0.id == projectID }
-                let project = try makeRemoteProject(
-                    from: files,
-                    projectID: projectID,
-                    existingProject: existingItem?.project
-                )
+                let project: PatchProject
+                if files.count > 1, files.allSatisfy(isRemotePatchPackage) {
+                    project = try makeCombinedRemotePackageProject(
+                        from: files,
+                        projectID: projectID,
+                        existingProject: existingItem?.project,
+                        fileManager: fileManager
+                    )
+                } else {
+                    project = try makeRemoteProject(
+                        from: files,
+                        projectID: projectID,
+                        existingProject: existingItem?.project
+                    )
+                }
                 if let existingItem {
                     try refreshExistingPackage(existingItem, with: project, fileManager: fileManager)
                 } else {
@@ -648,6 +658,61 @@ enum BundledPatchSeeder {
             directories: [],
             rules: rules
         )
+    }
+
+    private static func makeCombinedRemotePackageProject(
+        from files: [RemoteContentFile],
+        projectID: UUID,
+        existingProject: PatchProject?,
+        fileManager: FileManager
+    ) throws -> PatchProject {
+        let orderedFiles = files.sorted {
+            $0.combinedOrder == $1.combinedOrder
+                ? $0.fileName.localizedCaseInsensitiveCompare($1.fileName) == .orderedAscending
+                : $0.combinedOrder < $1.combinedOrder
+        }
+        var decodedPackages: [DecodedPatchPackage] = []
+        for file in orderedFiles {
+            guard let payloadURL = RemoteContentLibrary.localFileURL(for: file, fileManager: fileManager) else {
+                throw SeedError.emptyPayload(file.fileName)
+            }
+            let data = try Data(contentsOf: payloadURL, options: .mappedIfSafe)
+            let summary = try PatchPackageCodec.inspect(data)
+            let decoded: DecodedPatchPackage
+            if let storedKey = try PatchKeyStore.load(for: summary) {
+                decoded = try PatchPackageCodec.decode(data, contentKey: storedKey)
+            } else if summary.isPasswordProtected {
+                decoded = try PatchPackageCodec.decode(data, password: NexusPackageAutomaticPassword.value)
+                try PatchKeyStore.store(decoded.contentKey, for: summary)
+            } else {
+                decoded = try PatchPackageCodec.decode(data, password: nil)
+            }
+            decodedPackages.append(decoded)
+        }
+
+        guard !decodedPackages.isEmpty else { throw SeedError.emptyPayload("combined-3105") }
+        let rules = decodedPackages.flatMap { $0.project.rules }
+        let directories = decodedPackages.flatMap { $0.project.directories }
+        let bundleIdentifiers = decodedPackages.flatMap { $0.project.allBundleIdentifiers }
+            .reduce(into: [String]()) { result, bundleID in
+                if !result.contains(bundleID) { result.append(bundleID) }
+            }
+        guard !rules.isEmpty else { throw PatchPackageError.invalidProject }
+        let firstFile = orderedFiles[0]
+        let name = (firstFile.combinedGroupName ?? firstFile.name).trimmingCharacters(in: .whitespacesAndNewlines)
+        let project = PatchProject(
+            id: projectID,
+            name: name.isEmpty ? decodedPackages[0].project.name : name,
+            author: "NEXUS [REMOTE .3105]",
+            isPrivate: decodedPackages.contains { $0.project.isPrivate },
+            createdAt: existingProject?.createdAt ?? seedDate,
+            updatedAt: Date(),
+            bundleIdentifiers: bundleIdentifiers,
+            directories: directories,
+            rules: rules
+        )
+        try PatchPackageCodec.validate(project)
+        return project
     }
 
     private static func remoteProjectIDs(fileManager: FileManager = .default) -> Set<UUID> {

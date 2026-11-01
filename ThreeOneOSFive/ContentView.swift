@@ -1263,6 +1263,15 @@ private struct RemoteFileMiniRow: View {
           || file.mimeType?.lowercased() == "application/vnd.greeg.3105"
     }
 
+    private func isPackageFile(_ candidate: RemoteContentFile) -> Bool {
+        candidate.fileName.lowercased().hasSuffix(".3105")
+            || candidate.mimeType?.lowercased() == "application/vnd.greeg.3105"
+    }
+
+    private var isCombinedPackageGroup: Bool {
+        patchFiles.count > 1 && patchFiles.allSatisfy(isPackageFile)
+    }
+
     private var readableText: String {
         let fullText = file.textContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !fullText.isEmpty { return fullText }
@@ -1369,7 +1378,12 @@ private struct RemoteFileMiniRow: View {
             }
         }
         .task(id: file.sha256) {
-            guard isExportedPackage,
+            guard isExportedPackage else { return }
+            if isCombinedPackageGroup {
+                packageProjectID = projectID
+                return
+            }
+            guard
                   let url = RemoteContentLibrary.localFileURL(for: file),
                   let data = try? Data(contentsOf: url),
                   let summary = try? PatchPackageCodec.inspect(data) else { return }
@@ -1388,41 +1402,60 @@ private struct RemoteFileMiniRow: View {
     /// and use the internal rule targets. Never write raw .3105 bytes into
     /// a single assetindexer path.
     private func applyExportedPackage() {
-        guard let localURL = RemoteContentLibrary.localFileURL(for: file) else {
+        let packageFiles = patchFiles.filter(isPackageFile)
+        guard !packageFiles.isEmpty, packageFiles.count == patchFiles.count else {
+            actionAlert = GreegPatchActionAlert(
+                title: "Paquete incompatible",
+                message: "Este grupo mezcla paquetes .3105 con archivos normales. Sepáralos en categorías distintas."
+            )
+            return
+        }
+        guard packageFiles.allSatisfy({ RemoteContentLibrary.localFileURL(for: $0) != nil }) else {
             actionAlert = GreegPatchActionAlert(
                 title: "Sincroniza el archivo",
-                message: "El paquete todavía no está descargado. Pulsa Sincronizar."
+                message: "Uno de los paquetes todavía no está descargado. Pulsa Sincronizar."
             )
             return
         }
         isWorking = true
+        let sharedProjectID = projectID
+        let groupName = file.combinedGroupName ?? file.name
         Task.detached(priority: .userInitiated) {
             do {
-                let data = try Data(contentsOf: localURL)
-                let summary = try PatchPackageCodec.inspect(data)
-                let decoded: DecodedPatchPackage
-                if let storedKey = try PatchKeyStore.load(for: summary) {
-                    // Already unlocked on this same device. No password needed.
-                    decoded = try PatchPackageCodec.decode(data, contentKey: storedKey)
-                } else if summary.isPasswordProtected {
-                    // The original .3105 stays password-protected for other
-                    // importers; NEXUS unlocks it only after category access.
-                    decoded = try PatchPackageCodec.decode(
-                        data, password: NexusPackageAutomaticPassword.value
-                    )
-                    try PatchKeyStore.store(decoded.contentKey, for: summary)
-                } else {
-                    decoded = try PatchPackageCodec.decode(data, password: nil)
+                var decodedPackages: [DecodedPatchPackage] = []
+                for packageFile in packageFiles {
+                    guard let localURL = RemoteContentLibrary.localFileURL(for: packageFile) else {
+                        throw PatchPackageError.remoteImportFailed
+                    }
+                    let data = try Data(contentsOf: localURL)
+                    let summary = try PatchPackageCodec.inspect(data)
+                    let decoded: DecodedPatchPackage
+                    if let storedKey = try PatchKeyStore.load(for: summary) {
+                        decoded = try PatchPackageCodec.decode(data, contentKey: storedKey)
+                    } else if summary.isPasswordProtected {
+                        decoded = try PatchPackageCodec.decode(
+                            data, password: NexusPackageAutomaticPassword.value
+                        )
+                        try PatchKeyStore.store(decoded.contentKey, for: summary)
+                    } else {
+                        decoded = try PatchPackageCodec.decode(data, password: nil)
+                    }
+                    decodedPackages.append(decoded)
                 }
-                _ = try DevicePatchService.applyReplacingConflicts(project: decoded.project)
+                let project = try mergedRemotePackageProject(
+                    decodedPackages,
+                    id: sharedProjectID ?? decodedPackages[0].project.id,
+                    name: groupName
+                )
+                _ = try DevicePatchService.applyReplacingConflicts(project: project)
                 await MainActor.run {
                     isWorking = false
-                    packageProjectID = decoded.project.id
+                    packageProjectID = project.id
                     NexusHaptics.notification(.success)
                     NexusAudioPlayer.shared.play(named: "nexus_apply")
                     actionAlert = GreegPatchActionAlert(
                         title: "Patch aplicado",
-                        message: "Patch activado. Pulsa Original cuando quieras restaurar."
+                        message: "Los \(project.rules.count) archivos de los paquetes están activos. Pulsa Original para restaurarlos."
                     )
                 }
             } catch let error as PatchPackageError {
@@ -1443,6 +1476,31 @@ private struct RemoteFileMiniRow: View {
                 }
             }
         }
+    }
+
+    private func mergedRemotePackageProject(
+        _ packages: [DecodedPatchPackage],
+        id: UUID,
+        name: String
+    ) throws -> PatchProject {
+        let rules = packages.flatMap { $0.project.rules }
+        let directories = packages.flatMap { $0.project.directories }
+        let bundleIdentifiers = packages.flatMap { $0.project.allBundleIdentifiers }
+            .reduce(into: [String]()) { result, bundleID in
+                if !result.contains(bundleID) { result.append(bundleID) }
+            }
+        guard !rules.isEmpty else { throw PatchPackageError.invalidProject }
+        let project = PatchProject(
+            id: id,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? packages[0].project.name : name,
+            author: "NEXUS [REMOTE .3105]",
+            isPrivate: packages.contains { $0.project.isPrivate },
+            bundleIdentifiers: bundleIdentifiers,
+            directories: directories,
+            rules: rules
+        )
+        try PatchPackageCodec.validate(project)
+        return project
     }
 
     private func togglePatch() {

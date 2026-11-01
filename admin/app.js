@@ -294,8 +294,14 @@ function bindEvents() {
   els.signOutButton.addEventListener("click", signOut);
   els.fileForm.addEventListener("submit", saveFile);
   els.combinedFileForm?.addEventListener("submit", saveDedicatedCombinedFileGroup);
+  document.querySelector("#combinedPackageForm")?.addEventListener("submit", saveCombinedPackageGroup);
   document.querySelector("#combinedRefreshButton")?.addEventListener("click", () => {
     populateCombinedCategoryOptions();
+    populateCombinedPackageCategoryOptions();
+    loadFiles();
+  });
+  document.querySelector("#combinedPackageRefreshButton")?.addEventListener("click", () => {
+    populateCombinedPackageCategoryOptions();
     loadFiles();
   });
   document.querySelector("#exportedPackageForm")?.addEventListener("submit", saveExportedPackage);
@@ -499,7 +505,7 @@ function setSession(session) {
 }
 
 function setAdminView(target = "patches", updateHash = true) {
-  const view = ["patches", "categories", "keys", "app-keys", "packages", "combined"].includes(target) ? target : "patches";
+  const view = ["patches", "categories", "keys", "app-keys", "packages", "combined", "combined-3105"].includes(target) ? target : "patches";
   state.activeAdminView = view;
   document.querySelectorAll("[data-admin-view]").forEach(panel => panel.classList.toggle("hidden", panel.dataset.adminView !== view));
   document.querySelectorAll("[data-admin-target]").forEach(button => {
@@ -687,19 +693,38 @@ function renderFileCategoryOptions(selectedID = els.categoryInput.value || "file
 function populateCombinedCategoryOptions(selectedID = els.combinedCategoryInput?.value || "") {
   if (!els.combinedCategoryInput) return;
   const choices = allCategoryChoices()
-    .filter((category) => categoryContentType(category) === "patch")
     .sort((a, b) => categoryPath(a.id, allCategoryChoices()).localeCompare(categoryPath(b.id, allCategoryChoices()), "es"));
   els.combinedCategoryInput.replaceChildren();
   if (!choices.length) {
-    els.combinedCategoryInput.add(new Option("No hay categorías tipo patch", ""));
+    els.combinedCategoryInput.add(new Option("No hay categorías disponibles", ""));
     return;
   }
   for (const category of choices) {
-    els.combinedCategoryInput.add(new Option(categoryPath(category.id, allCategoryChoices()), category.id));
+    const type = categoryContentType(category);
+    const suffix = type === "container" ? " · Contenedora" : type === "text" ? " · Texto" : " · Patch";
+    els.combinedCategoryInput.add(new Option(`${categoryPath(category.id, allCategoryChoices())}${suffix}`, category.id));
   }
   if (choices.some((category) => category.id === selectedID)) {
     els.combinedCategoryInput.value = selectedID;
   }
+}
+
+function populateCombinedPackageCategoryOptions(selectedID = document.querySelector("#combinedPackageCategoryInput")?.value || "") {
+  const select = document.querySelector("#combinedPackageCategoryInput");
+  if (!select) return;
+  const choices = allCategoryChoices()
+    .sort((a, b) => categoryPath(a.id, allCategoryChoices()).localeCompare(categoryPath(b.id, allCategoryChoices()), "es"));
+  select.replaceChildren();
+  if (!choices.length) {
+    select.add(new Option("No hay categorías disponibles", ""));
+    return;
+  }
+  for (const category of choices) {
+    const type = categoryContentType(category);
+    const suffix = type === "container" ? " · Contenedora" : type === "text" ? " · Texto" : " · Patch";
+    select.add(new Option(`${categoryPath(category.id, allCategoryChoices())}${suffix}`, category.id));
+  }
+  if (choices.some((category) => category.id === selectedID)) select.value = selectedID;
 }
 
 function updateCategoryTypeUI() {
@@ -784,6 +809,7 @@ function renderCategoryEditor() {
     .join("");
   renderFileCategoryOptions();
   populateCombinedCategoryOptions();
+  populateCombinedPackageCategoryOptions();
   const orderedCategories = [...categories].sort((a, b) => categoryPath(a.id, categories).localeCompare(categoryPath(b.id, categories), "es"));
   els.categoryList.innerHTML = categories.length ? orderedCategories.map((category) => `
     <article class="categoryEditorCard">
@@ -1554,6 +1580,121 @@ async function saveCombinedFileGroup(selectedCategory, source = null) {
     if (uploadedPaths.length) await supabaseClient.storage.from(BUCKET).remove(uploadedPaths).catch(() => {});
     const message = adminErrorMessage(error);
     setCombinedStatus(message);
+    window.alert(message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function saveCombinedPackageGroup(event) {
+  event.preventDefault();
+  const status = document.querySelector("#combinedPackageStatusText");
+  const nameInput = document.querySelector("#combinedPackageNameInput");
+  const categoryInput = document.querySelector("#combinedPackageCategoryInput");
+  const fileInputs = [
+    document.querySelector("#combinedPackageFileOneInput"),
+    document.querySelector("#combinedPackageFileTwoInput"),
+  ];
+  const files = fileInputs.map((input) => input?.files?.[0] || null);
+  const setPackageStatus = (message) => {
+    if (status) status.textContent = message;
+    setStatus(message);
+  };
+  if (!state.session) { setPackageStatus("Inicia sesión como administrador."); return; }
+  if (state.busy) { setPackageStatus("Hay otra operación en curso."); return; }
+  if (!files.every(Boolean)) { setPackageStatus("Selecciona los dos paquetes .3105."); return; }
+  for (const file of files) {
+    if (!(await isCompatibleExported3105(file))) {
+      setPackageStatus("Uno de los archivos no es un .3105 válido exportado desde NEXUS/3105.");
+      return;
+    }
+  }
+  const category = allCategoryChoices().find((item) => item.id === categoryInput?.value);
+  if (!category || categoryContentType(category) !== "patch") {
+    setPackageStatus("Elige una categoría de tipo patch; las contenedoras y de texto no aceptan paquetes.");
+    return;
+  }
+  const name = nameInput?.value.trim();
+  if (!name) { setPackageStatus("Pon un nombre para el combinado .3105."); return; }
+
+  const groupID = crypto.randomUUID();
+  const baseSlug = safeSlug(name) || `combined-3105-${groupID.slice(0, 8)}`;
+  const price = Math.max(0.01, Number(document.querySelector("#combinedPackagePriceInput")?.value || 15));
+  const secureUpload = document.querySelector("#combinedPackageEncryptInput")?.checked === true;
+  const uploadedPaths = [];
+  const savedIDs = [];
+  setBusy(true, "Subiendo los dos paquetes .3105...");
+  try {
+    for (const [index, file] of files.entries()) {
+      const hash = await sha256Hex(file);
+      if (secureUpload && file.size > 12 * 1024 * 1024) {
+        throw new Error("El servidor seguro permite archivos de hasta 12 MiB.");
+      }
+      const safeName = safeStorageFileName(file.name).slice(0, 110);
+      const storagePath = secureUpload
+        ? `content/${crypto.randomUUID()}/${safeName}.nex`
+        : `content/${crypto.randomUUID()}/${safeName}`;
+      if (secureUpload) {
+        const response = await fetch(SUPABASE_URL + "/functions/v1/nexus-secure-patch?mode=upload", {
+          method: "POST",
+          headers: {
+            "Authorization": "Bearer " + state.session.access_token,
+            "apikey": SUPABASE_KEY,
+            "Content-Type": "application/octet-stream",
+            "X-Nexus-Path": storagePath,
+          },
+          body: file,
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.success || result.storage_path !== storagePath) {
+          throw new Error(result.error || "No se pudo cifrar uno de los paquetes .3105.");
+        }
+      } else {
+        const { error } = await supabaseClient.storage.from(BUCKET).upload(storagePath, file, {
+          cacheControl: "3600",
+          contentType: "application/vnd.greeg.3105",
+          upsert: false,
+        });
+        if (error) throw error;
+      }
+      uploadedPaths.push(storagePath);
+      const slug = `${baseSlug}-${index + 1}`;
+      const logicalPath = `packages/3105/${baseSlug}/${safeFileName(file.name)}`.slice(0, 180);
+      const { data: saved, error: rpcError } = await supabaseClient.rpc("admin_upsert_remote_content_file", {
+        p_id: null,
+        p_name: name,
+        p_slug: slug,
+        p_category: category.id,
+        p_target_bundle: DEFAULT_TARGET_BUNDLE,
+        p_target_path: logicalPath,
+        p_file_name: file.name,
+        p_mime_type: "application/vnd.greeg.3105",
+        p_byte_size: file.size,
+        p_sha256: hash,
+        p_storage_path: storagePath,
+        p_description: "Combinado .3105: las rutas reales están dentro del paquete exportado.",
+        p_force_new: true,
+        p_content_type: "patch",
+        p_text_content: null,
+        p_requires_key: categoryNeedsKey(category),
+        p_price_usd: price,
+        p_combined_group_id: groupID,
+        p_combined_group_name: name,
+        p_combined_order: index,
+      });
+      if (rpcError) throw rpcError;
+      if (saved?.file?.id) savedIDs.push(saved.file.id);
+    }
+    event.target.reset();
+    await loadFiles();
+    setPackageStatus("Combinado .3105 guardado. Pulsa Publicar cambios para sincronizar ambos paquetes.");
+  } catch (error) {
+    for (const savedID of savedIDs) {
+      await supabaseClient.rpc("admin_delete_remote_content_file", { p_id: savedID }).catch(() => {});
+    }
+    if (uploadedPaths.length) await supabaseClient.storage.from(BUCKET).remove(uploadedPaths).catch(() => {});
+    const message = adminErrorMessage(error);
+    setPackageStatus(message);
     window.alert(message);
   } finally {
     setBusy(false);
