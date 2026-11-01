@@ -177,6 +177,13 @@ const els = {
   descriptionInput: $("#descriptionInput"),
   packageModeLabel: $("#packageModeLabel"),
   importedPackageInput: $("#importedPackageInput"),
+  combinedPatchLabel: $("#combinedPatchLabel"),
+  combinedPatchInput: $("#combinedPatchInput"),
+  combinedPatchFields: $("#combinedPatchFields"),
+  combinedFileOneInput: $("#combinedFileOneInput"),
+  combinedPathOneInput: $("#combinedPathOneInput"),
+  combinedFileTwoInput: $("#combinedFileTwoInput"),
+  combinedPathTwoInput: $("#combinedPathTwoInput"),
   thumbnailInput: $("#thumbnailInput"),
   textContentLabel: $("#textContentLabel"),
   textContentInput: $("#textContentInput"),
@@ -294,6 +301,7 @@ function bindEvents() {
   });
   els.categoryInput.addEventListener("change", updateCategoryTypeUI);
   els.importedPackageInput.addEventListener("change", updatePackageMode);
+  els.combinedPatchInput.addEventListener("change", updateCombinedPatchMode);
   els.targetBundleInput.addEventListener("change", syncAssetVariantWithTargetBundle);
   els.assetVariantInput.addEventListener("change", () => {
     applyAssetVariant(els.assetVariantInput.value);
@@ -605,8 +613,11 @@ function updateCategoryTypeUI() {
   els.fileInput.required = !isText && !isContainer;
   if (!isText) els.textContentInput.value = "";
   if (isText || isContainer) els.importedPackageInput.checked = false;
+  if (isText || isContainer) els.combinedPatchInput.checked = false;
   els.packageModeLabel.classList.toggle("hidden", isText || isContainer);
+  els.combinedPatchLabel.classList.toggle("hidden", isText || isContainer);
   updatePackageMode();
+  updateCombinedPatchMode();
   suggestTargetPath();
 }
 
@@ -615,6 +626,7 @@ function updatePackageMode() {
   const category = categoryById(els.categoryInput.value) || allCategoryChoices().find((item) => item.id === els.categoryInput.value);
   const allowed = categoryContentType(category) === "patch";
   els.importedPackageInput.disabled = !allowed;
+  if (!allowed) els.combinedPatchInput.checked = false;
   els.packageModeLabel.classList.toggle("hidden", !allowed);
   els.fileInput.accept = packageMode ? ".3105,application/vnd.greeg.3105,application/octet-stream" : "";
   els.targetPathInput.placeholder = packageMode ? "packages/mi-patch/mi-patch.3105" : "patches/mi-patch.bundle";
@@ -623,6 +635,27 @@ function updatePackageMode() {
     els.categoryTypeHint.textContent = `${categoryPath(els.categoryInput.value, allCategoryChoices())} · Paquete .3105 exportado`;
   } else {
     updateAssetVariantVisibility();
+  }
+  updateCombinedPatchMode();
+}
+
+function updateCombinedPatchMode() {
+  const category = categoryById(els.categoryInput.value) || allCategoryChoices().find((item) => item.id === els.categoryInput.value);
+  const allowed = categoryContentType(category) === "patch";
+  const enabled = allowed && Boolean(els.combinedPatchInput.checked);
+  els.combinedPatchInput.disabled = !allowed || els.importedPackageInput.checked;
+  if (!allowed || els.importedPackageInput.checked) els.combinedPatchInput.checked = false;
+  els.combinedPatchFields.classList.toggle("hidden", !enabled);
+  els.fileUploadLabel.classList.toggle("hidden", enabled || categoryContentType(category) === "container");
+  els.fileInput.required = !enabled && allowed;
+  els.combinedFileOneInput.required = enabled;
+  els.combinedFileTwoInput.required = enabled;
+  els.combinedPathOneInput.required = enabled;
+  els.combinedPathTwoInput.required = enabled;
+  if (enabled) {
+    els.assetVariantLabel.classList.add("hidden");
+    els.targetPathInput.required = false;
+    els.importedPackageInput.checked = false;
   }
 }
 
@@ -918,6 +951,10 @@ async function saveFile(event) {
     setStatus("Esta sección es un contenedor. Elige una subcategoría para publicar archivos.");
     return;
   }
+  if (contentType === "patch" && els.combinedPatchInput.checked) {
+    await saveCombinedFileGroup(selectedCategory);
+    return;
+  }
   const textBody = els.textContentInput.value.trim();
   const packageMode = contentType === "patch" && els.importedPackageInput.checked;
   let file = els.fileInput.files?.[0] || null;
@@ -1041,13 +1078,108 @@ async function saveFile(event) {
   }
 }
 
+async function saveCombinedFileGroup(selectedCategory) {
+  const name = els.nameInput.value.trim();
+  const slug = safeSlug(els.slugInput.value || name);
+  const fileOne = els.combinedFileOneInput.files?.[0] || null;
+  const fileTwo = els.combinedFileTwoInput.files?.[0] || null;
+  const pathOne = safeRelativePath(els.combinedPathOneInput.value);
+  const pathTwo = safeRelativePath(els.combinedPathTwoInput.value);
+  if (!name || !slug) {
+    setStatus("Completa nombre y slug del patch combinado.");
+    return;
+  }
+  if (!fileOne || !fileTwo) {
+    setStatus("Selecciona los dos archivos del patch combinado.");
+    return;
+  }
+  if (!isCompleteTargetPath(pathOne) || !isCompleteTargetPath(pathTwo)) {
+    setStatus("Cada ruta debe incluir carpeta y archivo, por ejemplo bundles/archivo.bundle.");
+    return;
+  }
+
+  const previous = els.editingId.value ? state.files.find((file) => file.id === els.editingId.value) : null;
+  const groupID = previous?.combined_group_id || crypto.randomUUID();
+  const existingMembers = state.files
+    .filter((file) => file.combined_group_id === groupID)
+    .sort((left, right) => Number(left.combined_order || 0) - Number(right.combined_order || 0));
+  const items = [
+    { file: fileOne, path: pathOne, existing: existingMembers[0] || null },
+    { file: fileTwo, path: pathTwo, existing: existingMembers[1] || null },
+  ];
+  const uploadedPaths = [];
+  const savedIDs = [];
+  setBusy(true, "Subiendo patch combinado...");
+  try {
+    let thumbnailPath = els.descriptionInput.dataset.thumbnailPath || thumbnailMarkerFromDescription(els.descriptionInput.value);
+    const thumbnail = els.thumbnailInput.files?.[0];
+    if (thumbnail) {
+      const normalized = await normalizeImageForUpload(thumbnail);
+      thumbnailPath = `ui-icons/patch-thumbnails/${crypto.randomUUID()}.${safeStorageFileName(normalized.name).split(".").pop() || "png"}`;
+      const { error } = await supabaseClient.storage.from(UI_BUCKET).upload(thumbnailPath, normalized, {
+        cacheControl: "3600",
+        contentType: normalized.type || "image/png",
+        upsert: true,
+      });
+      if (error) throw error;
+    }
+    const description = withThumbnailMarker(els.descriptionInput.value, thumbnailPath);
+    for (const [index, item] of items.entries()) {
+      const hash = await sha256Hex(item.file);
+      const storagePath = `content/${crypto.randomUUID()}/${safeStorageFileName(item.file.name)}`;
+      const { error: uploadError } = await supabaseClient.storage.from(BUCKET).upload(storagePath, item.file, {
+        cacheControl: "3600",
+        contentType: item.file.type || "application/octet-stream",
+        upsert: true,
+      });
+      if (uploadError) throw uploadError;
+      uploadedPaths.push(storagePath);
+      const { data: saved, error: rpcError } = await supabaseClient.rpc("admin_upsert_remote_content_file", {
+        p_id: item.existing?.id || null,
+        p_name: name,
+        p_slug: index === 0 ? slug : `${slug}-2`,
+        p_category: selectedCategory.id,
+        p_target_bundle: safeTargetBundle(els.targetBundleInput.value),
+        p_target_path: item.path,
+        p_file_name: item.file.name,
+        p_mime_type: item.file.type || "application/octet-stream",
+        p_byte_size: item.file.size,
+        p_sha256: hash,
+        p_storage_path: storagePath,
+        p_description: description,
+        p_force_new: !item.existing,
+        p_content_type: "patch",
+        p_text_content: null,
+        p_combined_group_id: groupID,
+        p_combined_group_name: name,
+        p_combined_order: index,
+      });
+      if (rpcError) throw rpcError;
+      if (!item.existing && saved?.file?.id) savedIDs.push(saved.file.id);
+    }
+    resetForm();
+    await loadFiles();
+    setStatus("Patch combinado guardado. Pulsa Publicar cambios para que la app sincronice ambos archivos.");
+  } catch (error) {
+    for (const savedID of savedIDs) await supabaseClient.rpc("admin_delete_remote_content_file", { p_id: savedID }).catch(() => {});
+    if (uploadedPaths.length) await supabaseClient.storage.from(BUCKET).remove(uploadedPaths).catch(() => {});
+    const message = adminErrorMessage(error);
+    setStatus(message);
+    window.alert(message);
+  } finally {
+    setBusy(false);
+  }
+}
+
 async function toggleActive(file) {
   if (!state.session || state.busy) return;
   setBusy(true, "Actualizando estado...");
-  const { error } = await supabaseClient.rpc("admin_set_remote_content_active", {
-    p_id: file.id,
-    p_is_active: !file.is_active,
-  });
+  const members = adminGroupMembers(file);
+  let error = null;
+  for (const member of members) {
+    const result = await supabaseClient.rpc("admin_set_remote_content_active", { p_id: member.id, p_is_active: !file.is_active });
+    if (result.error) { error = result.error; break; }
+  }
   setBusy(false);
 
   if (error) {
@@ -1060,13 +1192,16 @@ async function toggleActive(file) {
 
 async function deleteFile(file) {
   if (!state.session || state.busy) return;
-  const ok = confirm(`Eliminar "${file.name}"?\n\nSe quitara del manifest al publicar. El iPhone dejara de verlo despues de sincronizar.`);
+  const members = adminGroupMembers(file);
+  const ok = confirm(`Eliminar "${file.combined_group_name || file.name}"?\n\n${members.length > 1 ? "Se quitaran los dos archivos del patch combinado." : "Se quitara el archivo."} El cambio se aplicara al publicar.`);
   if (!ok) return;
 
   setBusy(true, "Marcando eliminacion...");
-  const { error } = await supabaseClient.rpc("admin_delete_remote_content_file", {
-    p_id: file.id,
-  });
+  let error = null;
+  for (const member of members) {
+    const result = await supabaseClient.rpc("admin_delete_remote_content_file", { p_id: member.id });
+    if (result.error) { error = result.error; break; }
+  }
   setBusy(false);
 
   if (error) {
@@ -1177,10 +1312,18 @@ function editFile(file) {
   els.descriptionInput.dataset.thumbnailPath = thumbnailMarkerFromDescription(file.description);
   els.importedPackageInput.checked = String(file.file_name || "").toLowerCase().endsWith(".3105")
     || String(file.mime_type || "").toLowerCase() === "application/vnd.greeg.3105";
+  const groupMembers = file.combined_group_id
+    ? state.files.filter((item) => item.combined_group_id === file.combined_group_id)
+      .sort((left, right) => Number(left.combined_order || 0) - Number(right.combined_order || 0))
+    : [];
+  els.combinedPatchInput.checked = groupMembers.length > 1;
+  els.combinedPathOneInput.value = groupMembers[0]?.target_path || "";
+  els.combinedPathTwoInput.value = groupMembers[1]?.target_path || "";
   els.fileInput.value = "";
   els.thumbnailInput.value = "";
   els.textContentInput.value = file.text_content || "";
   updateCategoryTypeUI();
+  updateCombinedPatchMode();
   els.saveButton.textContent = "Reemplazar archivo";
   els.nameInput.focus();
 }
@@ -1193,11 +1336,15 @@ function resetForm() {
   delete els.targetPathInput.dataset.touched;
   els.categoryInput.value = "files";
   els.importedPackageInput.checked = false;
+  els.combinedPatchInput.checked = false;
+  els.combinedPathOneInput.value = "";
+  els.combinedPathTwoInput.value = "";
   els.textContentInput.value = "";
   delete els.descriptionInput.dataset.thumbnailPath;
   els.targetBundleInput.value = DEFAULT_TARGET_BUNDLE;
   els.targetPathInput.value = "";
   updateCategoryTypeUI();
+  updateCombinedPatchMode();
   updateAssetVariantVisibility();
   els.saveButton.textContent = "Crear patch nuevo";
   setStatus("Modo nuevo: se creara otro patch, no se reemplazara uno publicado.");
@@ -1346,9 +1493,10 @@ function renderFiles() {
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(query));
   });
-  const activeFiles = matchedFiles.filter(isManifestFile);
+  const displayFiles = dedupeAdminGroups(matchedFiles);
+  const activeFiles = displayFiles.filter(isManifestFile);
   const activeIds = new Set(activeFiles.map((file) => file.id));
-  const archivedFiles = matchedFiles.filter((file) => !activeIds.has(file.id));
+  const archivedFiles = displayFiles.filter((file) => !activeIds.has(file.id));
 
   els.fileList.replaceChildren();
   els.archivedFileList.replaceChildren();
@@ -1440,7 +1588,9 @@ function renderKeys() {
 function renderFileCard(file) {
   const node = els.fileTemplate.content.firstElementChild.cloneNode(true);
   node.dataset.fileId = file.id;
-  node.querySelector("h3").textContent = file.name;
+  node.querySelector("h3").textContent = file.combined_group_id
+    ? `${file.combined_group_name || file.name} (2 archivos combinados)`
+    : file.name;
   node.querySelector(".fileMeta").textContent = [
     categoryPath(file.category || "files", allCategoryChoices()),
     file.content_type === "text" ? "Texto" : (String(file.file_name || "").toLowerCase().endsWith(".3105") ? "Paquete .3105" : "Patch"),
@@ -1449,7 +1599,8 @@ function renderFileCard(file) {
     file.file_name,
     formatBytes(file.byte_size),
   ].join(" / ");
-  node.querySelector(".filePath").textContent = `Ruta: ${file.target_path || fallbackTargetPath(file)}`;
+  const paths = adminGroupMembers(file).map((member) => member.target_path || fallbackTargetPath(member));
+  node.querySelector(".filePath").textContent = `Ruta${paths.length > 1 ? "s" : ""}: ${paths.join(" + ")}`;
   node.querySelector(".fileHash").textContent = file.sha256;
   const badge = node.querySelector(".badge");
   badge.textContent = badgeLabel(file);
@@ -1462,6 +1613,21 @@ function renderFileCard(file) {
   node.querySelector(".replaceButton").addEventListener("click", () => editFile(file));
   node.querySelector(".deleteButton").addEventListener("click", () => deleteFile(file));
   return node;
+}
+
+function adminGroupMembers(file) {
+  const groupID = file.combined_group_id || file.id;
+  return state.files.filter((item) => (item.combined_group_id || item.id) === groupID);
+}
+
+function dedupeAdminGroups(files) {
+  const seen = new Set();
+  return files.filter((file) => {
+    const key = file.combined_group_id || file.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function presetRules(preset) {

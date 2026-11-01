@@ -177,6 +177,15 @@ h3 {
   accent-color: var(--accent);
 }
 
+.combinedPatchFields {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(47, 143, 255, 0.06);
+  border: 1px solid rgba(105, 178, 255, 0.24);
+  border-radius: 8px;
+}
+
 .settingsEditor {
   width: 100%;
   min-height: 320px;

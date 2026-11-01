@@ -19,6 +19,9 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
     let byteSize: Int64
     let sha256: String
     let storagePath: String
+    let combinedGroupID: String?
+    let combinedGroupName: String?
+    let combinedOrder: Int
     let isActive: Bool
     let deletedAt: String?
     let publishedAt: String?
@@ -39,6 +42,9 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         case byteSize = "byte_size"
         case sha256
         case storagePath = "storage_path"
+        case combinedGroupID = "combined_group_id"
+        case combinedGroupName = "combined_group_name"
+        case combinedOrder = "combined_order"
         case isActive = "is_active"
         case deletedAt = "deleted_at"
         case publishedAt = "published_at"
@@ -64,6 +70,9 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         byteSize = (try? container.decode(Int64.self, forKey: .byteSize)) ?? 0
         sha256 = ((try? container.decode(String.self, forKey: .sha256)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         storagePath = ((try? container.decode(String.self, forKey: .storagePath)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        combinedGroupID = try? container.decodeIfPresent(String.self, forKey: .combinedGroupID)
+        combinedGroupName = try? container.decodeIfPresent(String.self, forKey: .combinedGroupName)
+        combinedOrder = (try? container.decode(Int.self, forKey: .combinedOrder)) ?? 0
         isActive = (try? container.decode(Bool.self, forKey: .isActive)) ?? true
         deletedAt = try? container.decodeIfPresent(String.self, forKey: .deletedAt)
         publishedAt = try? container.decodeIfPresent(String.self, forKey: .publishedAt)
@@ -85,6 +94,9 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         byteSize: Int64,
         sha256: String,
         storagePath: String,
+        combinedGroupID: String? = nil,
+        combinedGroupName: String? = nil,
+        combinedOrder: Int = 0,
         isActive: Bool = true,
         deletedAt: String? = nil,
         publishedAt: String?
@@ -104,6 +116,9 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         self.byteSize = byteSize
         self.sha256 = sha256.lowercased()
         self.storagePath = storagePath
+        self.combinedGroupID = combinedGroupID
+        self.combinedGroupName = combinedGroupName
+        self.combinedOrder = combinedOrder
         self.isActive = isActive
         self.deletedAt = deletedAt
         self.publishedAt = publishedAt
@@ -126,6 +141,9 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
         try container.encode(byteSize, forKey: .byteSize)
         try container.encode(sha256, forKey: .sha256)
         try container.encode(storagePath, forKey: .storagePath)
+        try container.encodeIfPresent(combinedGroupID, forKey: .combinedGroupID)
+        try container.encodeIfPresent(combinedGroupName, forKey: .combinedGroupName)
+        try container.encode(combinedOrder, forKey: .combinedOrder)
         try container.encode(isActive, forKey: .isActive)
         try container.encodeIfPresent(deletedAt, forKey: .deletedAt)
         try container.encodeIfPresent(publishedAt, forKey: .publishedAt)
@@ -166,6 +184,15 @@ struct RemoteContentFile: Codable, Identifiable, Equatable {
 
     var isTextContent: Bool {
         contentType == "text"
+    }
+
+    var patchGroupID: String {
+        let value = combinedGroupID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? id : value
+    }
+
+    var isCombinedPatch: Bool {
+        !((combinedGroupID ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private static func safeComponent(_ value: String, fallback: String) -> String {
@@ -596,6 +623,7 @@ enum RemoteContentSyncError: LocalizedError {
 @MainActor
 final class RemoteContentStore: ObservableObject {
     @Published private(set) var installedFiles: [RemoteContentFile] = []
+    private(set) var allInstalledFiles: [RemoteContentFile] = []
     @Published private(set) var appContent: NexusAppContent = .empty
     @Published private(set) var remoteVersion = 0
     @Published private(set) var statusText = "Ready"
@@ -619,6 +647,7 @@ final class RemoteContentStore: ObservableObject {
     func loadLocalState() {
         guard let manifest = try? loadLocalManifest() else {
             installedFiles = []
+            allInstalledFiles = []
             appContent = .empty
             remoteVersion = 0
             return
@@ -627,13 +656,15 @@ final class RemoteContentStore: ObservableObject {
             // Do not expose or apply a cache whose manifest was replaced
             // outside the app. The next automatic sync will repair it.
             installedFiles = []
+            allInstalledFiles = []
             appContent = .empty
             remoteVersion = 0
             statusText = "Security check required"
             detailText = "Remote content will be verified during synchronization."
             return
         }
-        installedFiles = manifest.files.filter(\.isAvailable)
+        allInstalledFiles = manifest.files.filter(\.isAvailable)
+        installedFiles = displayFiles(from: allInstalledFiles)
         appContent = manifest.appContent
         remoteVersion = manifest.version
     }
@@ -667,7 +698,8 @@ final class RemoteContentStore: ObservableObject {
             if plan.changed.isEmpty && plan.obsolete.isEmpty {
                 try saveLocalManifest(manifest)
                 BundledPatchSeeder.seedIfNeeded()
-                installedFiles = manifest.files.filter(\.isAvailable)
+                allInstalledFiles = manifest.files.filter(\.isAvailable)
+                installedFiles = displayFiles(from: allInstalledFiles)
                 appContent = manifest.appContent
                 remoteVersion = manifest.version
                 progress = 1
@@ -712,7 +744,8 @@ final class RemoteContentStore: ObservableObject {
 
             try saveLocalManifest(manifest)
             BundledPatchSeeder.seedIfNeeded()
-            installedFiles = manifest.files.filter(\.isAvailable)
+            allInstalledFiles = manifest.files.filter(\.isAvailable)
+            installedFiles = displayFiles(from: allInstalledFiles)
             appContent = manifest.appContent
             remoteVersion = manifest.version
             progress = 1
@@ -727,6 +760,22 @@ final class RemoteContentStore: ObservableObject {
         }
 
         isBusy = false
+    }
+
+    func files(for file: RemoteContentFile) -> [RemoteContentFile] {
+        let groupID = file.patchGroupID
+        return allInstalledFiles
+            .filter { $0.patchGroupID == groupID }
+            .sorted {
+                $0.combinedOrder == $1.combinedOrder
+                    ? $0.fileName.localizedCaseInsensitiveCompare($1.fileName) == .orderedAscending
+                    : $0.combinedOrder < $1.combinedOrder
+            }
+    }
+
+    private func displayFiles(from files: [RemoteContentFile]) -> [RemoteContentFile] {
+        var seen = Set<String>()
+        return files.filter { seen.insert($0.patchGroupID).inserted }
     }
 
     private struct SyncPlan {

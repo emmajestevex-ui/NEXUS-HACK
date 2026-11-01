@@ -111,6 +111,18 @@
               </span>
               <span class="fieldHint">Actívalo para subir un patch que ya fue creado/exportado desde 3105. El iPhone lo importará completo, sin convertirlo.</span>
             </label>
+            <label id="combinedPatchLabel" class="checkLabel">
+              <input id="combinedPatchInput" type="checkbox" />
+              Patch combinado (2 archivos / 2 rutas)
+              <span class="fieldHint">La app aplicará y restaurará los dos archivos como una sola acción.</span>
+            </label>
+            <div id="combinedPatchFields" class="combinedPatchFields hidden">
+              <label>Archivo 1<input id="combinedFileOneInput" type="file" /></label>
+              <label>Ruta que reemplaza el archivo 1<input id="combinedPathOneInput" type="text" placeholder="carpeta/archivo.bundle" /></label>
+              <label>Archivo 2<input id="combinedFileTwoInput" type="file" /></label>
+              <label>Ruta que reemplaza el archivo 2<input id="combinedPathTwoInput" type="text" placeholder="carpeta/otro-archivo.bundle" /></label>
+              <span class="fieldHint">Los dos archivos se sincronizan juntos y aparecen como una sola categoría.</span>
+            </div>
             <label>
               Imagen pequena del patch (opcional)
               <input id="thumbnailInput" type="file" accept="image/*" />
