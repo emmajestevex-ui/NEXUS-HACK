@@ -496,7 +496,6 @@ enum BundledPatchSeeder {
         }
 
         let remoteFiles = standaloneRemotePatchFiles(fileManager: fileManager)
-        let remoteGroups = standaloneRemotePatchGroups(fileManager: fileManager)
         removeObsoleteRemoteProjects(activeRemoteFiles: remoteFiles, fileManager: fileManager)
 
         guard !remoteFiles.isEmpty else {
@@ -506,31 +505,30 @@ enum BundledPatchSeeder {
         let existingItems = PatchProjectLibrary.load(fileManager: fileManager)
         var preparedCount = 0
 
-        for files in remoteGroups {
-            guard let firstFile = files.first,
-                  let projectID = remoteProjectID(for: firstFile),
-                  files.allSatisfy({ RemoteContentLibrary.localFileURL(for: $0, fileManager: fileManager) != nil }) else {
-                log("patch: remote discarded \(files.first?.name ?? "unknown") reason=missing-project-id-or-local-payload")
+        for file in remoteFiles {
+            guard let projectID = remoteProjectID(for: file),
+                  let payloadURL = RemoteContentLibrary.localFileURL(for: file, fileManager: fileManager) else {
+                log("patch: remote discarded \(file.name) reason=missing-project-id-or-local-payload")
                 continue
             }
 
             do {
-                if files.count == 1, isRemotePatchPackage(firstFile),
-                   let payloadURL = RemoteContentLibrary.localFileURL(for: firstFile, fileManager: fileManager) {
+                if isRemotePatchPackage(file) {
                     try installRemotePatchPackage(
                         from: payloadURL,
                         existingItems: existingItems,
                         fileManager: fileManager
                     )
-                    log("patch: remote package \(firstFile.name) is ready")
+                    log("patch: remote package \(file.name) is ready")
                     preparedCount += 1
                     continue
                 }
 
                 let existingItem = existingItems.first { $0.id == projectID }
                 let project = try makeRemoteProject(
-                    from: files,
+                    from: file,
                     projectID: projectID,
+                    payloadURL: payloadURL,
                     existingProject: existingItem?.project
                 )
                 if let existingItem {
@@ -544,10 +542,10 @@ enum BundledPatchSeeder {
                     )
                 }
                 try? PatchWorkspaceService.deleteWorkspace(projectID: projectID, fileManager: fileManager)
-                log("patch: remote patch \(project.name) with \(project.rules.count) file(s) is ready")
+                log("patch: remote patch \(project.name) is ready")
                 preparedCount += 1
             } catch {
-                log("patch: remote patch \(firstFile.name) could not be prepared: \(error.localizedDescription)")
+                log("patch: remote patch \(file.name) could not be prepared: \(error.localizedDescription)")
             }
         }
         log("patch: remote records finally shown=\(preparedCount)")
@@ -597,64 +595,48 @@ enum BundledPatchSeeder {
     }
 
     private static func makeRemoteProject(
-        from files: [RemoteContentFile],
+        from file: RemoteContentFile,
         projectID: UUID,
+        payloadURL: URL,
         existingProject: PatchProject?
     ) throws -> PatchProject {
-        guard !files.isEmpty else { throw SeedError.emptyPayload("combined-patch") }
-        let orderedFiles = files.sorted { $0.combinedOrder == $1.combinedOrder
-            ? $0.fileName.localizedCaseInsensitiveCompare($1.fileName) == .orderedAscending
-            : $0.combinedOrder < $1.combinedOrder }
-        var rules: [PatchRule] = []
-        var bundleIDs: [String] = []
-
-        for file in orderedFiles {
-            guard let payloadURL = RemoteContentLibrary.localFileURL(for: file),
-                  let data = try? Data(contentsOf: payloadURL, options: .mappedIfSafe),
-                  !data.isEmpty else {
-                throw SeedError.emptyPayload(file.fileName)
-            }
-            let assetVariant = effectiveRemoteAssetVariant(for: file, projectID: projectID)
-            let effectiveBundleID = assetVariant?.bundleID
-                ?? targetBundleOverride(for: projectID)?.bundleID
-                ?? file.targetBundleID
-            let effectivePath = assetVariant.map {
-                assetIndexerDirectory + "/" + $0.filename
-            } ?? file.localRelativePath
-            bundleIDs.append(effectiveBundleID)
-            rules.append(PatchRule(
-                bundleID: effectiveBundleID,
-                relativePath: effectivePath,
-                replacementFilename: "Remote v\(file.version) - \(file.fileName)",
-                replacementData: data
-            ))
-        }
-
-        let firstFile = orderedFiles[0]
-        let remoteName = (firstFile.combinedGroupName ?? firstFile.name).trimmingCharacters(in: .whitespacesAndNewlines)
-        let projectName = remoteName.isEmpty ? firstFile.fileName : remoteName
+        let data = try Data(contentsOf: payloadURL, options: .mappedIfSafe)
+        guard !data.isEmpty else { throw SeedError.emptyPayload(payloadURL.lastPathComponent) }
+        let remoteName = file.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let projectName = remoteName.isEmpty ? file.fileName : remoteName
+        let assetVariant = effectiveRemoteAssetVariant(for: file, projectID: projectID)
+        let effectiveBundleID = assetVariant?.bundleID
+            ?? targetBundleOverride(for: projectID)?.bundleID
+            ?? file.targetBundleID
+        let effectivePath = assetVariant.map {
+            assetIndexerDirectory + "/" + $0.filename
+        } ?? file.localRelativePath
 
         return PatchProject(
             id: projectID,
             name: projectName,
-            author: remoteStyleMarker(for: firstFile),
+            author: remoteStyleMarker(for: file),
             createdAt: existingProject?.createdAt ?? seedDate,
             updatedAt: Date(),
-            bundleIdentifiers: bundleIDs.reduce(into: []) { result, bundleID in
-                if !result.contains(bundleID) { result.append(bundleID) }
-            },
+            bundleIdentifiers: [effectiveBundleID],
             directories: [],
-            rules: rules
+            rules: [
+                PatchRule(
+                    bundleID: effectiveBundleID,
+                    relativePath: effectivePath,
+                    replacementFilename: "Remote v\(file.version) - \(file.fileName)",
+                    replacementData: data
+                )
+            ]
         )
     }
 
     private static func remoteProjectIDs(fileManager: FileManager = .default) -> Set<UUID> {
-        Set(standaloneRemotePatchGroups(fileManager: fileManager).compactMap { $0.first }.compactMap(remoteProjectID))
+        Set(standaloneRemotePatchFiles(fileManager: fileManager).compactMap(remoteProjectID))
     }
 
     private static func sortedRemoteProjectIDs(fileManager: FileManager = .default) -> [UUID] {
-        standaloneRemotePatchGroups(fileManager: fileManager)
-            .compactMap { $0.first }
+        standaloneRemotePatchFiles(fileManager: fileManager)
             .sorted {
                 let leftPriority = remoteDisplayPriority(for: $0.name)
                 let rightPriority = remoteDisplayPriority(for: $1.name)
@@ -695,24 +677,8 @@ enum BundledPatchSeeder {
         return visibleFiles
     }
 
-    private static func standaloneRemotePatchGroups(fileManager: FileManager) -> [[RemoteContentFile]] {
-        let files = standaloneRemotePatchFiles(fileManager: fileManager)
-        var groups: [[RemoteContentFile]] = []
-        var indexes: [String: Int] = [:]
-        for file in files {
-            let key = file.patchGroupID
-            if let index = indexes[key] {
-                groups[index].append(file)
-            } else {
-                indexes[key] = groups.count
-                groups.append([file])
-            }
-        }
-        return groups
-    }
-
     private static func remoteProjectID(for file: RemoteContentFile) -> UUID? {
-        UUID(uuidString: file.patchGroupID)
+        UUID(uuidString: file.id)
     }
 
     private static func remoteStyleMarker(for file: RemoteContentFile) -> String {

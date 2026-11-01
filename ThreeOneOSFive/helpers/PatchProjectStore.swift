@@ -226,14 +226,16 @@ final class PatchProjectStore: ObservableObject {
         guard item.isLocked, !isBusy else { return }
         do {
             let data = try PatchProjectLibrary.readPackage(at: item.packageURL)
-            let pending = PendingUnlock(
+            pendingUnlock = PendingUnlock(
                 data: data,
                 summary: item.summary,
                 existingURL: item.packageURL,
                 origin: item.origin
             )
-            // Protected packages must be unlocked with their own password.
-            requestPassword(pending: pending)
+            passwordRequest = PatchPasswordRequest(
+                summary: item.summary,
+                origin: item.origin
+            )
         } catch let error as PatchPackageError {
             present(error)
         } catch {
@@ -369,7 +371,7 @@ final class PatchProjectStore: ObservableObject {
             return nil
         }
         if summary.isPasswordProtected {
-            guard let password, !password.isEmpty else {
+            guard let password else {
                 return PendingUnlock(
                     data: data,
                     summary: summary,
@@ -423,9 +425,13 @@ final class PatchProjectStore: ObservableObject {
 
     private func failUnlock(_ error: PatchPackageError) {
         isBusy = false
-        // No password sheet: show a normal error without exposing secrets.
-        clearPendingUnlock()
-        present(error)
+        // Keep the password sheet open so the user can retry.
+        // Presenting an alert while dismissing the sheet swallows the message.
+        if case .invalidPasswordOrCorruptedPackage = error {
+            unlockErrorKey = "patch.error.wrong_password"
+        } else {
+            unlockErrorKey = error.localizationKey
+        }
     }
 
     private func present(_ error: PatchPackageError) {

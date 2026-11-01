@@ -43,129 +43,6 @@ enum NexusHaptics {
     }
 }
 
-/// Relámpagos con trazos fractales irregulares, bifurcaciones orgánicas,
-/// destellos breves de distinta intensidad y cuatro capas de luz.
-/// Los rayos son eventos temporales, NO líneas que se deslizan por la pantalla.
-/// Se inmovilizan y atenúan al activar «Reducir movimiento» en iOS.
-private struct NexusStormBackground: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private func noise(_ seed: Double) -> Double {
-        let raw = sin(seed * 127.1 + 43.82) * 43758.5453123
-        return raw - floor(raw)
-    }
-
-    private func makePath(_ points: [CGPoint]) -> Path {
-        var path = Path()
-        for (index, point) in points.enumerated() {
-            if index == 0 {
-                path.move(to: point)
-            } else {
-                path.addLine(to: point)
-            }
-        }
-        return path
-    }
-
-    private func paint(_ path: Path, context: GraphicsContext, intensity: Double, isBranch: Bool) {
-        let alpha = max(0.0, min(intensity, 1.0))
-        let outerWidth: CGFloat = isBranch ? 10 : 24
-        let glowWidth: CGFloat = isBranch ? 5 : 10
-        let coreWidth: CGFloat = isBranch ? 0.65 : 1.15
-        let join: CGLineJoin = .round
-
-        context.stroke(path,
-            with: .color(NexusTheme.blue.opacity(alpha * 0.11)),
-            style: StrokeStyle(lineWidth: outerWidth, lineCap: .round, lineJoin: join))
-        context.stroke(path,
-            with: .color(NexusTheme.blueBright.opacity(alpha * 0.28)),
-            style: StrokeStyle(lineWidth: glowWidth, lineCap: .round, lineJoin: join))
-        context.stroke(path,
-            with: .color(Color(red: 0.47, green: 0.77, blue: 1.0).opacity(alpha * 0.64)),
-            style: StrokeStyle(lineWidth: isBranch ? 1.5 : 2.7, lineCap: .round, lineJoin: join))
-        context.stroke(path,
-            with: .color(Color(red: 0.90, green: 0.97, blue: 1.0).opacity(alpha * 0.92)),
-            style: StrokeStyle(lineWidth: coreWidth, lineCap: .round, lineJoin: join))
-    }
-
-    private func strike(context: GraphicsContext, width: Double, height: Double, time: Double, index: Int) {
-        let i = Double(index)
-        let interval = 3.7 + i * 0.87
-        let cycle = (time + i * 2.71) / interval
-        let event = floor(cycle)
-        let age = (cycle - event) * interval
-
-        // A lightning flash lasts only a fraction of a second; sometimes
-        // it fires a weaker echo. Most frames show a dark, clean background.
-        let strength: Double
-        if reduceMotion {
-            strength = index == 1 ? 0.045 : 0
-        } else if age < 0.36 {
-            let firstFlash = exp(-age * 28.0)
-            let secondFlash = age > 0.10 ? 0.48 * exp(-(age - 0.10) * 27.0) : 0
-            strength = min(0.90, (0.54 + noise(i * 9.17) * 0.29) * (firstFlash + secondFlash))
-        } else {
-            return
-        }
-
-        if strength <= 0.012 { return }
-
-        let originX = width * (0.12 + noise(i * 9.1) * 0.76)
-        let originY = height * (0.06 + noise(i * 7.3) * 0.25)
-        let length = height * (0.49 + noise(i * 2.9) * 0.36)
-        let drift = width * (noise(i * 13.1 + event * 0.71) - 0.5) * 0.45
-
-        var mainPoints: [CGPoint] = []
-        var wander = 0.0
-        for step in 0...30 {
-            let fraction = Double(step) / 30.0
-            let jitter = (noise(Double(step) * 2.49 + i * 91.7 + event * 4.33) - 0.5) * 44
-            wander = max(-62, min(62, wander * 0.68 + jitter))
-            let currentX = originX + drift * fraction + wander
-            let currentY = originY + length * fraction
-            mainPoints.append(CGPoint(x: currentX, y: currentY))
-        }
-
-        paint(makePath(mainPoints), context: context, intensity: strength, isBranch: false)
-
-        // Forks start ON the main channel and diverge at unequal angles,
-        // rather than appearing as independent vertical sticks.
-        for (branchIndex, originStep) in [8, 15, 23].enumerated() {
-            let j = Double(branchIndex)
-            let start = mainPoints[originStep]
-            var branchPoints: [CGPoint] = [start]
-            var x = Double(start.x)
-            var y = Double(start.y)
-            let direction = noise(i * 17.9 + j * 13.0 + event * 0.17) > 0.5 ? 1.0 : -1.0
-            for step in 1...8 {
-                let variation = noise(Double(step) * 3.19 + i * 13.7 + j * 47.1 + event)
-                x += direction * (4.0 + variation * 8.5)
-                y += 8.0 + noise(Double(step) * 7.9 + j * 2.3 + event) * 9.0
-                branchPoints.append(CGPoint(x: x, y: y))
-            }
-            paint(makePath(branchPoints), context: context,
-                  intensity: strength * (0.46 + noise(j + i) * 0.16), isBranch: true)
-        }
-    }
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: reduceMotion ? 1.0 : 1.0 / 30.0)) { timeline in
-            Canvas(opaque: false, rendersAsynchronously: true) { context, size in
-                let timestamp = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-                let width = max(1, Double(size.width))
-                let height = max(1, Double(size.height))
-                for index in 0..<5 {
-                    strike(context: context, width: width, height: height,
-                           time: timestamp, index: index)
-                }
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
-
 struct NexusBackground<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
@@ -183,7 +60,6 @@ struct NexusBackground<Content: View>: View {
             .ignoresSafeArea()
             .allowsHitTesting(false)
 
-            NexusStormBackground()
             content()
         }
     }
@@ -435,7 +311,7 @@ struct AppLogo: View {
 
     var body: some View {
         Group {
-            if let icon = UIImage(named: "NexusWolfLogo") ?? UIImage(named: "AppIcon60x60")
+            if let icon = UIImage(named: "AppIcon60x60")
                 ?? Bundle.main.path(forResource: "AppIcon60x60@2x", ofType: "png").flatMap(UIImage.init(contentsOfFile:))
                 ?? UIImage(named: "AppIcon") {
                 Image(uiImage: icon)

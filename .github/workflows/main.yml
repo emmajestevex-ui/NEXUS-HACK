@@ -1,4 +1,4 @@
-name: Build NEXUS IPA
+name: Build NEXUS HACK IPA
 
 on:
   workflow_dispatch:
@@ -21,7 +21,7 @@ jobs:
       - name: Mostrar schemes disponibles
         run: xcodebuild -project ThreeOneOSFive.xcodeproj -list
 
-      - name: Compilar NEXUS
+      - name: Compilar NEXUS HACK
         run: |
           set -o pipefail
           xcodebuild \
@@ -79,27 +79,27 @@ jobs:
       - name: Empaquetar panel admin
         run: |
           set -euo pipefail
-          zip -r NEXUS_ADMIN_panel.zip admin supabase/nexus_hack_complete_setup.sql supabase/remote_content_setup.sql supabase/secure_patch_keys_setup.sql supabase/licenses_setup.sql supabase/admin_emails_setup.sql SECURE_PATCH_KEYS_SETUP.md COMBINED_PATCH_SETUP.md
-          ls -lh NEXUS_ADMIN_panel.zip
+          zip -r NEXUS_HACK_ADMIN_panel.zip admin supabase/remote_content_setup.sql supabase/licenses_setup.sql supabase/admin_emails_setup.sql
+          ls -lh NEXUS_HACK_ADMIN_panel.zip
 
       - name: Subir panel admin
         uses: actions/upload-artifact@v4
         with:
-          name: NEXUS-admin-panel
-          path: NEXUS_ADMIN_panel.zip
+          name: NEXUS-HACK-admin-panel
+          path: NEXUS_HACK_ADMIN_panel.zip
           if-no-files-found: error
           retention-days: 30
 
       - name: Empaquetar panel de keys
         run: |
           set -euo pipefail
-          zip -r NEXUS_KEYS_panel.zip admin supabase/nexus_hack_complete_setup.sql supabase/remote_content_setup.sql supabase/secure_patch_keys_setup.sql supabase/licenses_setup.sql supabase/admin_emails_setup.sql SECURE_PATCH_KEYS_SETUP.md COMBINED_PATCH_SETUP.md
-          ls -lh NEXUS_KEYS_panel.zip
+          zip -r NEXUS_HACK_KEYS_panel.zip admin supabase/licenses_setup.sql supabase/admin_emails_setup.sql
+          ls -lh NEXUS_HACK_KEYS_panel.zip
 
       - name: Subir panel de keys
         uses: actions/upload-artifact@v4
         with:
-          name: NEXUS-keys-panel
-          path: NEXUS_KEYS_panel.zip
+          name: NEXUS-HACK-keys-panel
+          path: NEXUS_HACK_KEYS_panel.zip
           if-no-files-found: error
           retention-days: 30
