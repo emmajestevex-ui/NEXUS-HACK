@@ -1,13 +1,29 @@
 import Foundation
 
+private enum DevicePatchOperationError: LocalizedError {
+    case busy
+
+    var errorDescription: String? {
+        "NEXUS está terminando otra operación. Espera un momento y vuelve a intentarlo."
+    }
+}
+
 enum DevicePatchService {
-    // Serialize all patch transactions: a concurrent tap cannot race with
-    // the restore/switch process or corrupt another patch's backup.
+    // Serialize all patch transactions and reject a second intent instead of
+    // allowing two UI tasks to queue and change the final state unexpectedly.
+    private static let operationStateLock = NSLock()
+    private static var operationInProgress = false
     private static let transactionLock = NSRecursiveLock()
 
     static func apply(project: PatchProject) throws -> PatchTransactionReceipt {
-        transactionLock.lock()
-        defer { transactionLock.unlock() }
+        try withExclusiveOperation {
+            try withTransactionLock {
+                try applyLocked(project: project)
+            }
+        }
+    }
+
+    private static func applyLocked(project: PatchProject) throws -> PatchTransactionReceipt {
         let bundleIDs = orderedBundleIdentifiers(in: project)
         return try withResolvedContainers(bundleIDs: bundleIDs) { roots in
             let effectiveProject = projectUsingInstalledAssetIndexerPathIfNeeded(
@@ -33,29 +49,31 @@ enum DevicePatchService {
     /// If any prior target differs unexpectedly, abort without overwriting it.
     /// On a new apply failure, files already restored remain original.
     static func applyReplacingConflicts(project: PatchProject) throws -> PatchTransactionReceipt {
-        transactionLock.lock()
-        defer { transactionLock.unlock() }
-        let backupRoot = try PatchProjectLibrary.backupRootURL()
-        let effective = try withResolvedContainers(bundleIDs: orderedBundleIdentifiers(in: project)) { roots in
-            projectUsingInstalledAssetIndexerPathIfNeeded(project, roots: roots)
-        }
-        let conflicts = try PatchTransaction.conflictingReceipts(
-            for: effective, backupRoot: backupRoot
-        )
-        // Preflight every conflicting project before modifying any file.
-        for receipt in conflicts {
-            let inspection = try inspectRestore(receipt: receipt)
-            guard inspection.changedTargets.isEmpty else {
-                throw PatchPackageError.restoreTargetsChanged(
-                    inspection.changedTargets.map(\.displayPath)
+        try withExclusiveOperation {
+            try withTransactionLock {
+                let backupRoot = try PatchProjectLibrary.backupRootURL()
+                let effective = try withResolvedContainers(bundleIDs: orderedBundleIdentifiers(in: project)) { roots in
+                    projectUsingInstalledAssetIndexerPathIfNeeded(project, roots: roots)
+                }
+                let conflicts = try PatchTransaction.conflictingReceipts(
+                    for: effective, backupRoot: backupRoot
                 )
+                // Preflight every conflicting project before modifying any file.
+                for receipt in conflicts {
+                    let inspection = try inspectRestore(receipt: receipt)
+                    guard inspection.changedTargets.isEmpty else {
+                        throw PatchPackageError.restoreTargetsChanged(
+                            inspection.changedTargets.map(\.displayPath)
+                        )
+                    }
+                }
+                // Do not set allowChangedTargets = true. Never overwrite external edits.
+                for receipt in conflicts {
+                    try restoreLocked(receipt: receipt)
+                }
+                return try applyLocked(project: effective)
             }
         }
-        // Do not set allowChangedTargets = true. Never overwrite external edits.
-        for receipt in conflicts {
-            try restore(receipt: receipt)
-        }
-        return try apply(project: effective)
     }
 
     static func inspectRestore(receipt: PatchTransactionReceipt) throws -> PatchRestoreInspection {
@@ -77,8 +95,17 @@ enum DevicePatchService {
         receipt: PatchTransactionReceipt,
         allowChangedTargets: Bool = false
     ) throws {
-        transactionLock.lock()
-        defer { transactionLock.unlock() }
+        try withExclusiveOperation {
+            try withTransactionLock {
+                try restoreLocked(receipt: receipt, allowChangedTargets: allowChangedTargets)
+            }
+        }
+    }
+
+    private static func restoreLocked(
+        receipt: PatchTransactionReceipt,
+        allowChangedTargets: Bool = false
+    ) throws {
         let bundleIDs = try PatchTransaction.requiredBundleIdentifiers(for: receipt)
         try withResolvedContainers(bundleIDs: bundleIDs) { roots in
             try PatchTransaction.restore(
@@ -98,19 +125,46 @@ enum DevicePatchService {
         receipt: PatchTransactionReceipt,
         project: PatchProject
     ) throws {
-        let bundleIDs = try PatchTransaction.requiredBundleIdentifiers(for: receipt)
-        try withResolvedContainers(bundleIDs: bundleIDs) { roots in
-            try PatchTransaction.resetToAppliedState(
-                receipt: receipt,
-                fallbackProject: project,
-                containerResolver: { bundleID in
-                    guard let root = roots[bundleID] else {
-                        throw PatchPackageError.targetAppUnavailable(bundleID)
-                    }
-                    return root
+        try withExclusiveOperation {
+            try withTransactionLock {
+                let bundleIDs = try PatchTransaction.requiredBundleIdentifiers(for: receipt)
+                try withResolvedContainers(bundleIDs: bundleIDs) { roots in
+                    try PatchTransaction.resetToAppliedState(
+                        receipt: receipt,
+                        fallbackProject: project,
+                        containerResolver: { bundleID in
+                            guard let root = roots[bundleID] else {
+                                throw PatchPackageError.targetAppUnavailable(bundleID)
+                            }
+                            return root
+                        }
+                    )
                 }
-            )
+            }
         }
+    }
+
+    private static func withTransactionLock<T>(_ operation: () throws -> T) rethrows -> T {
+        transactionLock.lock()
+        defer { transactionLock.unlock() }
+        return try operation()
+    }
+
+    private static func withExclusiveOperation<T>(_ operation: () throws -> T) throws -> T {
+        operationStateLock.lock()
+        guard !operationInProgress else {
+            operationStateLock.unlock()
+            throw DevicePatchOperationError.busy
+        }
+        operationInProgress = true
+        operationStateLock.unlock()
+
+        defer {
+            operationStateLock.lock()
+            operationInProgress = false
+            operationStateLock.unlock()
+        }
+        return try operation()
     }
 
     static func latestReceipt(projectID: UUID) -> PatchTransactionReceipt? {

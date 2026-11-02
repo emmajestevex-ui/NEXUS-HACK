@@ -666,6 +666,7 @@ final class RemoteContentStore: ObservableObject {
     private var syncingContent: NexusAppContent = .empty
     private let minimumAutomaticInterval: TimeInterval = 10 * 60
     private var lastAutomaticAttempt: Date?
+    private var syncTask: Task<Void, Never>?
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -703,8 +704,10 @@ final class RemoteContentStore: ObservableObject {
     }
 
     func syncIfPossible(force: Bool = false) {
+        // Reserve the sync before creating the task. Lifecycle events and
+        // quick taps can otherwise all pass the old `isBusy == false` check.
+        guard syncTask == nil, !isBusy else { return }
         loadLocalState()
-        guard !isBusy else { return }
         let licenseKey = UserDefaults.standard.string(forKey: "greeg.license.key")?.normalizedLicenseKey ?? ""
         guard !licenseKey.isEmpty else { return }
         if !force,
@@ -713,11 +716,18 @@ final class RemoteContentStore: ObservableObject {
             return
         }
         lastAutomaticAttempt = Date()
-        Task { await sync(force: force) }
+        isBusy = true
+        syncTask = Task { [weak self] in
+            guard let self else { return }
+            await self.sync(force: force)
+        }
     }
 
     private func sync(force: Bool) async {
-        isBusy = true
+        defer {
+            isBusy = false
+            syncTask = nil
+        }
         progress = nil
         statusText = "Checking updates"
         detailText = force ? "Manual update started." : "Automatic update started."
@@ -742,7 +752,6 @@ final class RemoteContentStore: ObservableObject {
                     ? "No published remote files yet."
                     : "\(installedFiles.count) remote file(s) installed."
                 lastChecked = Date()
-                isBusy = false
                 return
             }
 
@@ -792,8 +801,6 @@ final class RemoteContentStore: ObservableObject {
             detailText = error.localizedDescription
             lastChecked = Date()
         }
-
-        isBusy = false
     }
 
     func files(for file: RemoteContentFile) -> [RemoteContentFile] {
