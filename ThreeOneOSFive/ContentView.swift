@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Combine
 
 struct ContentView: View {
     @EnvironmentObject private var patchDraftCoordinator: PatchDraftCoordinator
@@ -130,7 +131,9 @@ private struct NexusMembershipView: View {
     @AppStorage("greeg.license.supabaseUnlocked") private var isUnlocked = false
     @State private var showingDeactivateConfirmation = false
     @State private var showingLicenseSheet = false
+    @State private var now = Date()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let expirationPoller = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     let onSignOut: () -> Void
     let onLicenseActivated: () -> Void
 
@@ -142,7 +145,18 @@ private struct NexusMembershipView: View {
 
     private var expirationText: String {
         guard let date = LicenseEntitlements.storedExpirationDate() else { return "Sin fecha definida" }
-        return date.formatted(date: .abbreviated, time: .shortened)
+        let remainingDays = max(0, Int(ceil(date.timeIntervalSince(now) / 86_400)))
+        guard remainingDays > 0 else { return "Vencida" }
+        if remainingDays == 1 { return "Vence mañana" }
+        if remainingDays < 30 { return "Vence en \(remainingDays) días" }
+
+        let months = max(1, remainingDays / 30)
+        if months < 12 {
+            return months == 1 ? "Vence en 1 mes" : "Vence en \(months) meses"
+        }
+
+        let years = months / 12
+        return years == 1 ? "Vence en 1 año" : "Vence en \(years) años"
     }
 
     var body: some View {
@@ -177,7 +191,7 @@ private struct NexusMembershipView: View {
                             Divider().overlay(Color.white.opacity(0.08))
 
                             MembershipDetailRow(icon: "key.fill", title: "Clave", value: maskedKey, tint: NexusTheme.blueBright)
-                            MembershipDetailRow(icon: "clock.fill", title: "Estado", value: isUnlocked ? "Activa" : "Inactiva", tint: isUnlocked ? NexusTheme.success : NexusTheme.secondaryText)
+                            MembershipDetailRow(icon: "clock.fill", title: "Estado", value: membershipStatus, tint: membershipStatus == "Activa" ? NexusTheme.success : NexusTheme.secondaryText)
                             MembershipDetailRow(icon: "calendar", title: "Expiración", value: expirationText, tint: NexusTheme.blueBright)
 
                             Button {
@@ -233,6 +247,9 @@ private struct NexusMembershipView: View {
             .background(NexusBackground { Color.clear }.ignoresSafeArea())
             .navigationTitle("Membresía")
             .navigationBarTitleDisplayMode(.inline)
+            .onReceive(expirationPoller) { value in
+                now = value
+            }
             .sheet(isPresented: $showingLicenseSheet) {
                 GreegLicenseView {
                     NexusHaptics.notification(.success)
@@ -254,6 +271,12 @@ private struct NexusMembershipView: View {
                 Text("Se eliminará la key guardada en este dispositivo y tendrás que activarla de nuevo.")
             }
         }
+    }
+
+    private var membershipStatus: String {
+        guard isUnlocked else { return "Inactiva" }
+        guard let date = LicenseEntitlements.storedExpirationDate() else { return "Activa" }
+        return date > now ? "Activa" : "Vencida"
     }
 }
 
