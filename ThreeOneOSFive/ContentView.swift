@@ -1255,7 +1255,6 @@ private struct RemoteFileMiniRow: View {
     @State private var actionAlert: GreegPatchActionAlert?
     @State private var showKeySheet = false
     @State private var showingFullText = false
-    @State private var packageProjectID: UUID?
     let file: RemoteContentFile
     let tint: Color
 
@@ -1269,7 +1268,10 @@ private struct RemoteFileMiniRow: View {
     }
 
     private var activeProjectID: UUID? {
-        isExportedPackage ? packageProjectID : projectID
+        // Remote packages are applied with the stable remote group ID. Do not
+        // replace it with the package's internal ID after relaunch: that made
+        // an already-applied .3105 look inactive until the user tapped it.
+        projectID
     }
 
     private var isApplied: Bool {
@@ -1289,10 +1291,6 @@ private struct RemoteFileMiniRow: View {
     private func isPackageFile(_ candidate: RemoteContentFile) -> Bool {
         candidate.fileName.lowercased().hasSuffix(".3105")
             || candidate.mimeType?.lowercased() == "application/vnd.greeg.3105"
-    }
-
-    private var isCombinedPackageGroup: Bool {
-        patchFiles.count > 1 && patchFiles.allSatisfy(isPackageFile)
     }
 
     private var readableText: String {
@@ -1400,18 +1398,6 @@ private struct RemoteFileMiniRow: View {
                 remoteContentStore.syncIfPossible(force: true)
             }
         }
-        .task(id: file.sha256) {
-            guard isExportedPackage else { return }
-            if isCombinedPackageGroup {
-                packageProjectID = projectID
-                return
-            }
-            guard
-                  let url = RemoteContentLibrary.localFileURL(for: file),
-                  let data = try? Data(contentsOf: url),
-                  let summary = try? PatchPackageCodec.inspect(data) else { return }
-            packageProjectID = summary.packageID
-        }
         .alert(item: $actionAlert) { alert in
             Alert(
                 title: Text(alert.title),
@@ -1473,7 +1459,6 @@ private struct RemoteFileMiniRow: View {
                 _ = try DevicePatchService.applyReplacingConflicts(project: project)
                 await MainActor.run {
                     isWorking = false
-                    packageProjectID = project.id
                     NexusHaptics.notification(.success)
                     NexusAudioPlayer.shared.play(named: "nexus_apply")
                     actionAlert = GreegPatchActionAlert(
