@@ -371,9 +371,9 @@ private struct NexusIntroWebView: UIViewRepresentable {
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         let web = WKWebView(frame: .zero, configuration: config)
         web.isOpaque = false
-        web.backgroundColor = .black
+        web.backgroundColor = .clear
         web.scrollView.isScrollEnabled = false
-        web.scrollView.backgroundColor = .black
+        web.scrollView.backgroundColor = .clear
         if let url = Bundle.main.url(forResource: "nexus_intro_animation", withExtension: "html") {
             web.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         }
@@ -386,26 +386,37 @@ private struct NexusLaunchExperience: View {
     let onFinished: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var didFinish = false
+    @State private var didStart = false
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if reduceMotion {
-                VStack(spacing: 12) {
-                    AppLogo(size: 112)
-                    Text("NEXUS").font(.largeTitle.bold()).foregroundStyle(.white)
-                }
-            } else {
+            // Always draw a native first frame. The WebView's 3D scene loads
+            // asynchronously, so this prevents a black flash on cold launch.
+            VStack(spacing: 12) {
+                AppLogo(size: 112)
+                    .shadow(color: NexusTheme.blue.opacity(0.42), radius: 22)
+                Text("NEXUS")
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(.white)
+            }
+            if !reduceMotion {
                 NexusIntroWebView().ignoresSafeArea()
             }
         }
         .onAppear {
-            // Recurso suministrado por el propietario, reproducido una sola vez.
-            NexusAudioPlayer.shared.play(named: "nexus_intro")
-            DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0.6 : 4.35)) {
-                guard !didFinish else { return }
-                didFinish = true
-                onFinished()
+            guard !didStart else { return }
+            didStart = true
+            let duration = reduceMotion ? 0.6 : 4.35
+
+            // Leave the initial frame to SwiftUI before doing audio/WebKit work.
+            DispatchQueue.main.async {
+                NexusAudioPlayer.shared.play(named: "nexus_intro")
+                DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+                    guard !self.didFinish else { return }
+                    self.didFinish = true
+                    self.onFinished()
+                }
             }
         }
     }

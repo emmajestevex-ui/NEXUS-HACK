@@ -316,13 +316,6 @@ private struct NexusSupportView: View {
                 url: "https://discord.gg/tz87yCBgq",
                 icon: "bubble.left.and.bubble.right.fill",
                 color: "blue"
-            ),
-            NexusAppSocial(
-                title: "Discord de la comunidad",
-                subtitle: "Comunidad NEXUS",
-                url: "https://discord.gg/9NUBpqNGQ",
-                icon: "person.3.fill",
-                color: "blue"
             )
         ]
     }
@@ -1021,10 +1014,14 @@ private struct GreegHomeView: View {
     }
 
     private var displaySocials: [NexusAppSocial] {
-        if !remoteContentStore.appContent.socials.isEmpty { return remoteContentStore.appContent.socials }
+        let socials = remoteContentStore.appContent.socials.filter {
+            !$0.title.localizedCaseInsensitiveContains("discord de la comunidad")
+                && !$0.url.localizedCaseInsensitiveContains("discord.gg/9NUBpqNGQ")
+        }
+        if !socials.isEmpty { return socials }
         return [
-            NexusAppSocial(title: "Discord", subtitle: "Comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "bubble.left.and.bubble.right.fill", color: "blue"),
-            NexusAppSocial(title: "TikTok", subtitle: "@tumbado_sensi7", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black")
+            NexusAppSocial(title: "Discord de la app", subtitle: "Soporte oficial de NEXUS", url: "https://discord.gg/tz87yCBgq", icon: "bubble.left.and.bubble.right.fill", color: "blue"),
+            NexusAppSocial(title: "TikTok", subtitle: "@nexus.hack", url: "https://www.tiktok.com/@nexus.hack?_r=1&_t=ZS-9BKs95AB7bR", icon: "music.note", color: "black")
         ]
     }
 
@@ -2771,10 +2768,10 @@ private enum GreegSocialLink {
     case tiktok
 
     var title: String { "TikTok" }
-    var subtitle: String { "@tumbado_sensi7" }
+    var subtitle: String { "@nexus.hack" }
     var systemImage: String { "music.note" }
     var url: URL {
-        URL(string: "https://www.tiktok.com/@tumbado_sensi7")!
+        URL(string: "https://www.tiktok.com/@nexus.hack?_r=1&_t=ZS-9BKs95AB7bR")!
     }
 }
 

@@ -576,8 +576,7 @@ const DEFAULT_APP_CONTENT = {
   ],
   socials: [
     { title: "Discord de la app", subtitle: "Soporte oficial de NEXUS", url: "https://discord.gg/tz87yCBgq", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
-    { title: "Discord de la comunidad", subtitle: "Comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "person.3.fill", color: "blue" },
-    { title: "TikTok", subtitle: "@tumbado_sensi7", url: "https://www.tiktok.com/@tumbado_sensi7", icon: "music.note", color: "black" }
+    { title: "TikTok", subtitle: "@nexus.hack", url: "https://www.tiktok.com/@nexus.hack?_r=1&_t=ZS-9BKs95AB7bR", icon: "music.note", color: "black" }
   ]
 };
 
@@ -602,10 +601,23 @@ function addNexusDiscordLinks(content) {
   const links = Array.isArray(content.socials) ? content.socials : [];
   const required = [
     { title: "Discord de la app", subtitle: "Soporte oficial de NEXUS", url: "https://discord.gg/tz87yCBgq", icon: "bubble.left.and.bubble.right.fill", color: "blue" },
-    { title: "Discord de la comunidad", subtitle: "Comunidad NEXUS", url: "https://discord.gg/9NUBpqNGQ", icon: "person.3.fill", color: "blue" }
+    { title: "TikTok", subtitle: "@nexus.hack", url: "https://www.tiktok.com/@nexus.hack?_r=1&_t=ZS-9BKs95AB7bR", icon: "music.note", color: "black" }
   ];
   const urls = new Set(required.map(x => x.url.toLowerCase()));
-  return { ...content, socials: [...required, ...links.filter(x => !urls.has(String(x.url || "").toLowerCase()))] };
+  return {
+    ...content,
+    socials: [
+      ...required,
+      ...links.filter(x => {
+        const url = String(x.url || "").toLowerCase();
+        const title = String(x.title || "").toLowerCase();
+        return !urls.has(url)
+          && !title.includes("discord de la comunidad")
+          && !url.includes("discord.gg/9nubpqngq")
+          && !title.includes("tiktok");
+      })
+    ]
+  };
 }
 
 const BUILTIN_CATEGORY_CHOICES = [

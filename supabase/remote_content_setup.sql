@@ -185,8 +185,8 @@ values (
         {"id": "support", "title": "Soporte", "icon": "headphones.circle.fill", "kind": "support", "enabled": true, "sort_order": 5}
       ],
       "socials": [
-        {"title": "Discord", "subtitle": "Comunidad NEXUS HACK", "url": "https://discord.gg/9NUBpqNGQ", "icon": "bubble.left.and.bubble.right.fill", "color": "blue"},
-        {"title": "TikTok", "subtitle": "@tumbado_sensi7", "url": "https://www.tiktok.com/@tumbado_sensi7", "icon": "music.note", "color": "black"}
+        {"title": "Discord de la app", "subtitle": "Soporte oficial de NEXUS", "url": "https://discord.gg/tz87yCBgq", "icon": "bubble.left.and.bubble.right.fill", "color": "blue"},
+        {"title": "TikTok", "subtitle": "@nexus.hack", "url": "https://www.tiktok.com/@nexus.hack?_r=1&_t=ZS-9BKs95AB7bR", "icon": "music.note", "color": "black"}
       ]
     }'::jsonb
 )

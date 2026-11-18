@@ -105,8 +105,8 @@ struct SettingsView: View {
                 Section(language.text("settings.social_media")) {
                     creditsRow(
                         name: "TikTok",
-                        role: "@gregg_top",
-                        url: "https://www.tiktok.com/@gregg_top?is_from_webapp=1&sender_device=pc"
+                        role: "@nexus.hack",
+                        url: "https://www.tiktok.com/@nexus.hack?_r=1&_t=ZS-9BKs95AB7bR"
                     )
                 }
 
