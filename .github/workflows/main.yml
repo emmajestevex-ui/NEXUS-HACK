@@ -7,6 +7,55 @@ on:
       - main
 
 jobs:
+  build-nexus-interfaz:
+    name: Build NexusInterfaz unsigned IPA
+    runs-on: macos-15
+
+    steps:
+      - name: Descargar proyecto
+        uses: actions/checkout@v4
+
+      - name: Preparar XcodeGen
+        run: brew install xcodegen
+
+      - name: Verificar recursos y generar proyecto
+        working-directory: NexusInterfaz
+        run: |
+          set -euo pipefail
+          python3 scripts/check_assets.py
+          bash scripts/generate_app_icon.sh
+          xcodegen generate
+
+      - name: Compilar IPA sin firma
+        working-directory: NexusInterfaz
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project NexusInterfaz.xcodeproj \
+            -scheme NexusInterfaz \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build
+          APP=build/Build/Products/Release-iphoneos/NexusInterfaz.app
+          test -f "$APP/NexusInterfaz"
+          mkdir -p package/Payload
+          ditto "$APP" package/Payload/NexusInterfaz.app
+          (cd package && zip -qry ../NexusInterfaz-unsigned.ipa Payload)
+          unzip -t NexusInterfaz-unsigned.ipa
+
+      - name: Subir IPA de NexusInterfaz
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusInterfaz-unsigned
+          path: NexusInterfaz/NexusInterfaz-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
+
   build:
     name: Build unsigned IPA
     runs-on: macos-15

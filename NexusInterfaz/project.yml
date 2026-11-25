@@ -1,0 +1,20 @@
+name: NexusInterfaz
+options:
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  NexusInterfaz:
+    type: application
+    platform: iOS
+    sources:
+      - path: NexusInterfaz
+        excludes: [ModelResources]
+      - path: NexusInterfaz/ModelResources
+        excludes: [.gitkeep]
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.nexusinterfaz
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        SWIFT_VERSION: 5.0

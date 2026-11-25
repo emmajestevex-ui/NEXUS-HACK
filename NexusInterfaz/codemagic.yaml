@@ -1,0 +1,42 @@
+workflows:
+  nexus-ios-unsigned:
+    name: Nexus iOS - IPA sin firma
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      xcode: latest
+    scripts:
+      - name: Comprobar recursos gráficos y 3D
+        script: |
+          python3 scripts/check_assets.py
+      - name: Generar proyecto Xcode
+        script: |
+          set -euo pipefail
+          command -v xcodegen >/dev/null || brew install xcodegen
+          bash scripts/generate_app_icon.sh
+          xcodegen generate
+      - name: Compilar para iPhone
+        script: |
+          set -euo pipefail
+          xcodebuild -project NexusInterfaz.xcodeproj -scheme NexusInterfaz \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$CM_BUILD_DIR/build" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' build
+      - name: Empaquetar IPA sin firma y verificar
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR"
+          APP=build/Build/Products/Release-iphoneos/NexusInterfaz.app
+          test -f "$APP/NexusInterfaz"
+          test -f "$APP/Info.plist"
+          if test -f NexusInterfaz/ModelResources/character.mesh; then
+            for asset in character.mesh basecolor.jpg normal.jpg roughness.jpg metallic.jpg; do
+              test -s "$APP/$asset"
+            done
+          fi
+          mkdir -p artifacts build/package/Payload
+          ditto "$APP" build/package/Payload/NexusInterfaz.app
+          (cd build/package && zip -qry "$CM_BUILD_DIR/artifacts/NexusInterfaz-unsigned.ipa" Payload)
+          unzip -t artifacts/NexusInterfaz-unsigned.ipa
+    artifacts:
+      - artifacts/*.ipa

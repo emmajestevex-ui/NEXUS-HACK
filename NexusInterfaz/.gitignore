@@ -1,0 +1,5 @@
+build/
+artifacts/
+DerivedData/
+*.xcodeproj/
+.DS_Store
